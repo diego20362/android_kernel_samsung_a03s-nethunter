@@ -9,5 +9,5 @@ jobs:
         with:
           kernel-url: https://github.com/diego20362/android_kernel_samsung_a03s-nethunter.git
           kernel-branch: android-4.19-stable
-          config: arch/arm64/configs/defconfig
+          config: defconfig
           arch: arm64
