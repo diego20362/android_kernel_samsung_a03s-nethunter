@@ -18,7 +18,7 @@ jobs:
         with:
           ref: android-4.19-stable
           fetch-depth: 1
-          submodules: recursive
+          submodules: false
 
       - name: Instalar dependencias
         run: |
