@@ -11,4 +11,4 @@ jobs:
           kernel-branch: android-4.19-stable
           config: defconfig
           arch: arm64
-          extra-cmd: "KCFLAGS=-Wno-error"
+          extra-make-args: "KCFLAGS=-Wno-error"
