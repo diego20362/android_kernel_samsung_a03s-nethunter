@@ -4,12 +4,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
       - name: Build Kernel
         uses: dabao1955/kernel_build_action@main
         with:
-          kernel-url: https://github.com/diego20362/android_kernel_samsung_a03s-nethunter
+          kernel-url: https://github.com/diego20362/android_kernel_samsung_a03s-nethunter.git
           kernel-branch: android-4.19-stable
-          config: defconfig
+          config: arch/arm64/configs/defconfig
           arch: arm64
