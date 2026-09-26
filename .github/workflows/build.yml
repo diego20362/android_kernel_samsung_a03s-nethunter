@@ -1,14 +1,103 @@
-name: Build Kernel
-on: [workflow_dispatch]
+
+name: A03s NetHunter - Diagnostico
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  inspect:
+    name: Inspeccionar kernel A03s
+    runs-on: ubuntu-22.04
+
     steps:
-      - name: Build Kernel
-        uses: dabao1955/kernel_build_action@main
+      - name: Descargar codigo del kernel
+        uses: actions/checkout@v4
         with:
-          kernel-url: https://github.com/diego20362/android_kernel_samsung_a03s-nethunter.git
-          kernel-branch: android-4.19-stable
-          config: defconfig
-          arch: arm64
-          extra-make-args: "KCFLAGS=-Wno-error"
+          ref: android-4.19-stable
+          fetch-depth: 1
+          submodules: recursive
+
+      - name: Instalar dependencias
+        run: |
+          sudo apt-get update
+
+          sudo apt-get install -y \
+            bc \
+            bison \
+            build-essential \
+            cpio \
+            flex \
+            git \
+            libelf-dev \
+            libncurses-dev \
+            libssl-dev \
+            python3 \
+            rsync \
+            unzip \
+            zip
+
+      - name: Revisar version del kernel
+        run: |
+          echo "===== VERSION DEL KERNEL ====="
+          head -n 10 Makefile
+
+      - name: Buscar defconfig
+        run: |
+          echo "===== DEFCONFIG DISPONIBLES ====="
+
+          find arch/arm64/configs \
+            -type f \
+            -name '*defconfig' \
+            -print
+
+      - name: Revisar KernelSU
+        run: |
+          echo "===== CARPETAS KERNELSU ====="
+
+          find . -maxdepth 4 \
+            -iname '*kernelsu*' \
+            -print
+
+          echo "===== REFERENCIAS KERNELSU ====="
+
+          grep -Rni \
+            --include='Kconfig' \
+            'kernelsu' \
+            drivers 2>/dev/null || true
+
+      - name: Buscar drivers Ralink
+        run: |
+          echo "===== CONTROLADORES RT2800 ====="
+
+          find drivers/net/wireless \
+            \( -iname '*rt2800*' \
+            -o -iname '*rt2x00*' \) \
+            -print 2>/dev/null || true
+
+      - name: Buscar scripts de compilacion
+        run: |
+          echo "===== SCRIPTS DE BUILD ====="
+
+          find . -maxdepth 4 -type f \
+            \( -name 'build.sh' \
+            -o -name 'build.config*' \
+            -o -name 'mkbootimg*' \
+            -o -name '*defconfig' \) \
+            -print
+
+      - name: Guardar archivos de diagnostico
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a03s-diagnostico
+          path: |
+            Makefile
+            drivers/Kconfig
+            arch/arm64/configs/
+            build.sh
+            build.config*
+          if-no-files-found: warn
+          retention-days: 7
