@@ -87,7 +87,16 @@ jobs:
             -o -name 'mkbootimg*' \
             -o -name '*defconfig' \) \
             -print
+      - name: Comparar defconfig A03s
+        shell: bash
+        run: |
+          echo "===== a03s_defconfig ====="
+          grep -nE 'CONFIG_LOCALVERSION|CONFIG_MTK|CONFIG_USB|CONFIG_WLAN|CONFIG_RT2|CONFIG_CFG80211|CONFIG_MAC80211' arch/arm64/configs/a03s_defconfig || true
 
+          echo "===== a03s_00_defconfig ====="
+          grep -nE 'CONFIG_LOCALVERSION|CONFIG_MTK|CONFIG_USB|CONFIG_WLAN|CONFIG_RT2|CONFIG_CFG80211|CONFIG_MAC80211' arch/arm64/configs/a03s_00_defconfig || true
+
+          echo "===== FIN COMPARACION ====="
       - name: Guardar archivos de diagnostico
         if: always()
         uses: actions/upload-artifact@v4
