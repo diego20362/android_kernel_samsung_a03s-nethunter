@@ -113,7 +113,20 @@ jobs:
           find drivers/net/wireless -maxdepth 3 -type f \
             \( -iname '*usb*' -o -iname '*ralink*' \) \
             -print 2>/dev/null || true
+      - name: Comprobar opciones Ralink
+        shell: bash
+        run: |
+          echo "===== OPCIONES KCONFIG RALINK ====="
+          grep -nE 'config (RT2X00|RT2X00_USB|RT2X00_LIB_USB|RT2800USB|RT2800LIB|RT2800USB_RT35XX)' \
+            drivers/net/wireless/ralink/rt2x00/Kconfig || true
 
+          echo "===== DEPENDENCIAS USB WIFI ====="
+          grep -nE 'config (CFG80211|MAC80211|USB|USB_SUPPORT)' \
+            net/wireless/Kconfig net/mac80211/Kconfig drivers/usb/Kconfig 2>/dev/null || true
+
+          echo "===== OPCIONES RALINK EN DEFCONFIG ====="
+          grep -nE 'CONFIG_RT2X00|CONFIG_RT2800|CONFIG_MAC80211|CONFIG_CFG80211|CONFIG_USB=' \
+            arch/arm64/configs/a03s_defconfig || true
       - name: Guardar archivos de diagnostico
         if: always()
         uses: actions/upload-artifact@v4
