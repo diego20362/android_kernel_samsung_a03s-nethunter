@@ -98,6 +98,21 @@ jobs:
           grep -nE 'CONFIG_LOCALVERSION|CONFIG_MTK|CONFIG_USB|CONFIG_WLAN|CONFIG_RT2|CONFIG_CFG80211|CONFIG_MAC80211|CONFIG_MODULES' arch/arm64/configs/a03s_00_defconfig || true
 
           echo "===== FIN COMPARACION ====="
+          
+      - name: Buscar controlador Ralink
+        shell: bash
+        run: |
+          echo "===== BUSCAR RT5370 Y RT2X00 ====="
+          find drivers \( -iname '*rt2*' -o -iname '*5370*' \) -print 2>/dev/null || true
+
+          echo "===== BUSCAR REFERENCIAS EN KCONFIG ====="
+          grep -RniE 'RT2X00|RT2800USB|RT2800LIB' \
+            drivers/net drivers/usb 2>/dev/null || true
+
+          echo "===== BUSCAR CONTROLADORES USB WIFI ====="
+          find drivers/net/wireless -maxdepth 3 -type f \
+            \( -iname '*usb*' -o -iname '*ralink*' \) \
+            -print 2>/dev/null || true
 
       - name: Guardar archivos de diagnostico
         if: always()
