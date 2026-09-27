@@ -4,129 +4,51 @@ name: A03s NetHunter - Diagnostico
 on:
   workflow_dispatch:
 
-permisos :
-  Contenido : leer
+permissions:
+  contents: read
 
-empleos :
-  inspeccionar :
-    nombre : Inspeccionar kernel A03s
-    Se ejecuta en : ubuntu-22.04
+jobs:
+  inspect:
+    name: Inspeccionar kernel A03s
+    runs-on: ubuntu-22.04
 
-    pasos :
-      - nombre : Descargar codigo del kernel
-        usos : actions/checkout@v4
-        con :
-          Referencia : android-4.19-stable
-          profundidad de búsqueda : 1
-          submódulos : falso
+    steps:
+      - name: Descargar codigo del kernel
+        uses: actions/checkout@v4
+        with:
+          ref: android-4.19-stable
+          fetch-depth: 1
+          submodules: false
 
-      - nombre : Instalar dependencias
-        correr : |
-          sudo apt-get update
-
-          sudo apt-get install -y \
-            bc \
-            bisonte
-            build-essential \
-            cpio \
-            doblar \
-            git \
-            libelf-dev
-            libncurses-dev \
-            libssl-dev \
-            Python 3
-            rsync \
-            descomprimir
-            cremallera
-
-      - nombre : Revisar versión del kernel
-        correr : |
-          echo "===== VERSIÓN DEL KERNEL ====="
-          head -n 10 Makefile
-
-      - nombre : Buscar defconfig
-        correr : |
-          echo "===== DEFCONFIG DISPONIBLES ====="
-
-          encontrar arch/arm64/configs \
-            -tipo f \
-            -nombre '*defconfig' \
-            -imprimir
-
-      - nombre : Revisar KernelSU
-        correr : |
-          echo "===== ALFOMBRAS KERNELSU ====="
-
-          encontrar . -maxdepth 4 \
-            -iname '*kernelsu*' \
-            -imprimir
-
-          echo "===== REFERENCIAS KERNELSU ====="
-
-          grep -Rni \
-            --include='Kconfig' \
-            'kernelsu' \
-            controladores 2>/dev/null || verdadero
-
-      - nombre : Buscar conductores Ralink
-        correr : |
-          echo "===== CONTROLADORES RT2800 ====="
-
-          buscar controladores/red/inalámbrico
-            \( -iname '*rt2800*' \
-            -o -iname '*rt2x00*' \) \
-            -print 2>/dev/null || true
-
-      - nombre : Buscar scripts de compilación
-        correr : |
-          echo "===== SCRIPTS DE BUILD ====="
-
-          encontrar . -maxdepth 4 -type f \
-            \( -name 'build.sh' \
-            -o -name 'build.config*' \
-            -o -name 'mkbootimg*' \
-            -o -name '*defconfig' \) \
-            -imprimir
-
-      - nombre : Comparar defconfig A03s
-        shell : bash
-        correr : |
-          echo "===== CONFIGURACION A03S ====="
-          grep -nE 'CONFIG_LOCALVERSION|CONFIG_MTK|CONFIG_USB|CONFIG_WLAN|CONFIG_RT2|CONFIG_CFG80211|CONFIG_MAC80211|CONFIG_MODULES' arch/arm64/configs/a03s_defconfig || true
-
-          echo "===== CONFIGURACION A03S 00 ====="
-          grep -nE 'CONFIG_LOCALVERSION|CONFIG_MTK|CONFIG_USB|CONFIG_WLAN|CONFIG_RT2|CONFIG_CFG80211|CONFIG_MAC80211|CONFIG_MODULES' arch/arm64/configs/a03s_00_defconfig || true
-
-          echo "===== FIN COMPARACION ====="
-          
-      - nombre : Buscar controlador Ralink
-        shell : bash
-        correr : |
-          echo "===== BUSCAR RT5370 Y RT2X00 ====="
-          buscar controladores \( -iname '*rt2*' -o -iname '*5370*' \) -print 2>/dev/null || true
-
-          echo "===== BUSCAR REFERENCIAS EN KCONFIG ====="
-          grep -RniE 'RT2X00|RT2800USB|RT2800LIB' \
-            controladores/controladores de red/usb 2>/dev/null || verdadero
-
-          echo "===== BUSCAR CONTROLADORES USB WIFI ====="
-          find drivers/net/wireless -maxdepth 3 -type f \
-            \( -iname '*usb*' -o -iname '*ralink*' \) \
-            -print 2>/dev/null || true
-      - name: Comprobar opciones Ralink
+      - name: Revisar kernel y defconfig
         shell: bash
         run: |
-          echo "===== OPCIONES KCONFIG RALINK ====="
-          grep -nE 'config (RT2X00|RT2X00_USB|RT2X00_LIB_USB|RT2800USB|RT2800LIB|RT2800USB_RT35XX)' \
+          echo "===== VERSION KERNEL ====="
+          head -n 10 Makefile
+
+          echo "===== DEFCONFIG A03S ====="
+          ls arch/arm64/configs/*a03s* 2>/dev/null || true
+
+          echo "===== OPCIONES WIFI ====="
+          grep -nE 'CONFIG_CFG80211|CONFIG_MAC80211|CONFIG_USB=|CONFIG_RT2X00|CONFIG_RT2800' \
+            arch/arm64/configs/a03s_defconfig || true
+
+      - name: Buscar controlador RT5370
+        shell: bash
+        run: |
+          echo "===== ARCHIVOS RT2X00 ====="
+          find drivers -iname '*rt2x00*' -o -iname '*rt2800*' -o -iname '*5370*'
+
+          echo "===== OPCIONES KCONFIG ====="
+          grep -nE 'config (RT2X00|RT2800USB|RT2800USB_RT53XX|RT2X00_LIB_USB)' \
             drivers/net/wireless/ralink/rt2x00/Kconfig || true
 
-          echo "===== DEPENDENCIAS USB WIFI ====="
-          grep -nE 'config (CFG80211|MAC80211|USB|USB_SUPPORT)' \
-            net/wireless/Kconfig net/mac80211/Kconfig drivers/usb/Kconfig 2>/dev/null || true
+          echo "===== DEPENDENCIAS ====="
+          sed -n '130,195p' drivers/net/wireless/ralink/rt2x00/Kconfig
 
-          echo "===== OPCIONES RALINK EN DEFCONFIG ====="
-          grep -nE 'CONFIG_RT2X00|CONFIG_RT2800|CONFIG_MAC80211|CONFIG_CFG80211|CONFIG_USB=' \
-            arch/arm64/configs/a03s_defconfig || true
+          echo "===== MAKEFILE RALINK ====="
+          cat drivers/net/wireless/ralink/rt2x00/Makefile
+
       - name: Guardar archivos de diagnostico
         if: always()
         uses: actions/upload-artifact@v4
@@ -134,9 +56,7 @@ empleos :
           name: a03s-diagnostico
           path: |
             Makefile
-            drivers/Kconfig
             arch/arm64/configs/
-            build.sh
-            build.config*
+            drivers/net/wireless/ralink/rt2x00/
           if-no-files-found: warn
           retention-days: 7
