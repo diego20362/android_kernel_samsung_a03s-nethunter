@@ -4,93 +4,93 @@ name: A03s NetHunter - Diagnostico
 on:
   workflow_dispatch:
 
-permissions:
-  contents: read
+permisos :
+  Contenido : leer
 
-jobs:
-  inspect:
-    name: Inspeccionar kernel A03s
-    runs-on: ubuntu-22.04
+empleos :
+  inspeccionar :
+    nombre : Inspeccionar kernel A03s
+    Se ejecuta en : ubuntu-22.04
 
-    steps:
-      - name: Descargar codigo del kernel
-        uses: actions/checkout@v4
-        with:
-          ref: android-4.19-stable
-          fetch-depth: 1
-          submodules: false
+    pasos :
+      - nombre : Descargar codigo del kernel
+        usos : actions/checkout@v4
+        con :
+          Referencia : android-4.19-stable
+          profundidad de búsqueda : 1
+          submódulos : falso
 
-      - name: Instalar dependencias
-        run: |
+      - nombre : Instalar dependencias
+        correr : |
           sudo apt-get update
 
           sudo apt-get install -y \
             bc \
-            bison \
+            bisonte
             build-essential \
             cpio \
-            flex \
+            doblar \
             git \
-            libelf-dev \
+            libelf-dev
             libncurses-dev \
             libssl-dev \
-            python3 \
+            Python 3
             rsync \
-            unzip \
-            zip
+            descomprimir
+            cremallera
 
-      - name: Revisar version del kernel
-        run: |
-          echo "===== VERSION DEL KERNEL ====="
+      - nombre : Revisar versión del kernel
+        correr : |
+          echo "===== VERSIÓN DEL KERNEL ====="
           head -n 10 Makefile
 
-      - name: Buscar defconfig
-        run: |
+      - nombre : Buscar defconfig
+        correr : |
           echo "===== DEFCONFIG DISPONIBLES ====="
 
-          find arch/arm64/configs \
-            -type f \
-            -name '*defconfig' \
-            -print
+          encontrar arch/arm64/configs \
+            -tipo f \
+            -nombre '*defconfig' \
+            -imprimir
 
-      - name: Revisar KernelSU
-        run: |
-          echo "===== CARPETAS KERNELSU ====="
+      - nombre : Revisar KernelSU
+        correr : |
+          echo "===== ALFOMBRAS KERNELSU ====="
 
-          find . -maxdepth 4 \
+          encontrar . -maxdepth 4 \
             -iname '*kernelsu*' \
-            -print
+            -imprimir
 
           echo "===== REFERENCIAS KERNELSU ====="
 
           grep -Rni \
             --include='Kconfig' \
             'kernelsu' \
-            drivers 2>/dev/null || true
+            controladores 2>/dev/null || verdadero
 
-      - name: Buscar drivers Ralink
-        run: |
+      - nombre : Buscar conductores Ralink
+        correr : |
           echo "===== CONTROLADORES RT2800 ====="
 
-          find drivers/net/wireless \
+          buscar controladores/red/inalámbrico
             \( -iname '*rt2800*' \
             -o -iname '*rt2x00*' \) \
             -print 2>/dev/null || true
 
-      - name: Buscar scripts de compilacion
-        run: |
+      - nombre : Buscar scripts de compilación
+        correr : |
           echo "===== SCRIPTS DE BUILD ====="
 
-          find . -maxdepth 4 -type f \
+          encontrar . -maxdepth 4 -type f \
             \( -name 'build.sh' \
             -o -name 'build.config*' \
             -o -name 'mkbootimg*' \
             -o -name '*defconfig' \) \
-            -print
+            -imprimir
 
-      - name: Comparar defconfig A03s
-        shell: bash
-        run: |
+      - nombre : Comparar defconfig A03s
+        shell : bash
+        correr : |
           echo "===== CONFIGURACION A03S ====="
           grep -nE 'CONFIG_LOCALVERSION|CONFIG_MTK|CONFIG_USB|CONFIG_WLAN|CONFIG_RT2|CONFIG_CFG80211|CONFIG_MAC80211|CONFIG_MODULES' arch/arm64/configs/a03s_defconfig || true
 
@@ -99,15 +99,15 @@ jobs:
 
           echo "===== FIN COMPARACION ====="
           
-      - name: Buscar controlador Ralink
-        shell: bash
-        run: |
+      - nombre : Buscar controlador Ralink
+        shell : bash
+        correr : |
           echo "===== BUSCAR RT5370 Y RT2X00 ====="
-          find drivers \( -iname '*rt2*' -o -iname '*5370*' \) -print 2>/dev/null || true
+          buscar controladores \( -iname '*rt2*' -o -iname '*5370*' \) -print 2>/dev/null || true
 
           echo "===== BUSCAR REFERENCIAS EN KCONFIG ====="
           grep -RniE 'RT2X00|RT2800USB|RT2800LIB' \
-            drivers/net drivers/usb 2>/dev/null || true
+            controladores/controladores de red/usb 2>/dev/null || verdadero
 
           echo "===== BUSCAR CONTROLADORES USB WIFI ====="
           find drivers/net/wireless -maxdepth 3 -type f \
