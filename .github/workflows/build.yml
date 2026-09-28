@@ -19,7 +19,20 @@ jobs:
           ref: android-4.19-stable
           fetch-depth: 1
           submodules: false
+      - name: Revisar herramientas del compilador
+        shell: bash
+        run: |
+          echo "===== CLANG DISPONIBLE ====="
+          clang --version || true
 
+          echo "===== GCC AARCH64 DISPONIBLE ====="
+          aarch64-linux-gnu-gcc --version || true
+
+          echo "===== BINUTILS AARCH64 ====="
+          aarch64-linux-gnu-ld --version || true
+
+          echo "===== RUTA CLANG DEL MAKEFILE ====="
+          ls -l toolchain/clang/host/linux-x86/clang-r383902/bin/ 2>/dev/null || true
       - name: Revisar kernel y defconfig
         shell: bash
         run: |
