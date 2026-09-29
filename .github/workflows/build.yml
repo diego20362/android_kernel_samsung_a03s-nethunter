@@ -13,12 +13,32 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+
       - name: Descargar codigo del kernel
         uses: actions/checkout@v4
         with:
           ref: android-4.19-stable
           fetch-depth: 1
           submodules: false
+
+      - name: Instalar herramientas ARM64
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gcc-aarch64-linux-gnu \
+            binutils-aarch64-linux-gnu \
+            lld
+
+          echo "===== VERIFICAR GCC ====="
+          aarch64-linux-gnu-gcc --version
+
+          echo "===== VERIFICAR LINKER ====="
+          aarch64-linux-gnu-ld --version
+
+          echo "===== VERIFICAR LLD ====="
+          ld.lld --version
+
       - name: Revisar herramientas del compilador
         shell: bash
         run: |
