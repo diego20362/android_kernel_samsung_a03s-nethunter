@@ -108,5 +108,6 @@ jobs:
             Makefile
             arch/arm64/configs/
             drivers/net/wireless/ralink/rt2x00/
+          include-hidden-files: true
           if-no-files-found: warn
           retention-days: 7
