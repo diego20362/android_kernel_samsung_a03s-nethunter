@@ -1,4 +1,3 @@
-
 name: A03s NetHunter - Diagnostico
 
 on:
@@ -13,7 +12,6 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-
       - name: Descargar codigo del kernel
         uses: actions/checkout@v4
         with:
@@ -21,19 +19,27 @@ jobs:
           fetch-depth: 1
           submodules: false
 
-      - name: Instalar herramientas ARM64
+      - name: Instalar herramientas ARM64 y Clang
         shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            clang \
+            llvm \
+            lld \
             gcc-aarch64-linux-gnu \
             binutils-aarch64-linux-gnu \
-            lld
+            bc bison flex \
+            libssl-dev libelf-dev \
+            build-essential python3
 
-          echo "===== VERIFICAR GCC ====="
+          echo "===== VERIFICAR CLANG ====="
+          clang --version
+
+          echo "===== VERIFICAR GCC ARM64 ====="
           aarch64-linux-gnu-gcc --version
 
-          echo "===== VERIFICAR LINKER ====="
+          echo "===== VERIFICAR LINKER ARM64 ====="
           aarch64-linux-gnu-ld --version
 
           echo "===== VERIFICAR LLD ====="
@@ -42,14 +48,8 @@ jobs:
       - name: Comprobar configuracion A03s
         shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            bc bison flex \
-            libssl-dev libelf-dev \
-            build-essential python3
-
           echo "===== GENERAR CONFIGURACION ====="
-          make ARCH=arm64 a03s_defconfig
+          make ARCH=arm64 CC=clang HOSTCC=clang CROSS_COMPILE=aarch64-linux-gnu- a03s_defconfig
 
           echo "===== VERIFICAR RT5370 ====="
           grep -E 'CONFIG_(CFG80211|MAC80211|RT2X00|RT2800USB|RT2800USB_RT53XX)=' .config || true
@@ -68,6 +68,7 @@ jobs:
 
           echo "===== RUTA CLANG DEL MAKEFILE ====="
           ls -l toolchain/clang/host/linux-x86/clang-r383902/bin/ 2>/dev/null || true
+
       - name: Revisar kernel y defconfig
         shell: bash
         run: |
