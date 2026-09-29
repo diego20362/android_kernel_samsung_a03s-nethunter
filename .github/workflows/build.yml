@@ -52,7 +52,16 @@ jobs:
           make ARCH=arm64 CC=clang HOSTCC=clang CROSS_COMPILE=aarch64-linux-gnu- a03s_defconfig
 
           echo "===== VERIFICAR RT5370 ====="
-          grep -E 'CONFIG_(CFG80211|MAC80211|RT2X00|RT2800USB|RT2800USB_RT53XX)=' .config || true
+          grep -nE 'RT2X00|RT2800USB|CFG80211|MAC80211' .config || true
+
+          echo "===== OPCIONES EN DEFCONFIG ====="
+          grep -nE 'RT2X00|RT2800USB' arch/arm64/configs/a03s_defconfig || true
+
+          echo "===== VERIFICAR DEPENDENCIAS USB ====="
+          grep -nE '^CONFIG_USB=|^CONFIG_USB_SUPPORT=' .config || true
+
+          echo "===== VERIFICAR OPCIONES DESACTIVADAS ====="
+          grep -nE '# CONFIG_(RT2X00|RT2800USB|RT2X00_LIB_USB).*not set' .config || true
 
       - name: Revisar herramientas del compilador
         shell: bash
