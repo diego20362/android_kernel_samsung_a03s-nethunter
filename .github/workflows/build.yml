@@ -104,6 +104,7 @@ jobs:
         with:
           name: a03s-diagnostico
           path: |
+            .config
             Makefile
             arch/arm64/configs/
             drivers/net/wireless/ralink/rt2x00/
