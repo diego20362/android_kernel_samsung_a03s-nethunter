@@ -1,4 +1,4 @@
-name: RT5370 Kconfig Check
+name: Find Ralink Dependency
 
 on:
   workflow_dispatch:
@@ -11,34 +11,27 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Clone kernel
+      - name: Clone
         run: |
           git clone --depth=1 --branch android-4.19-stable https://github.com/diego20362/android_kernel_samsung_a03s-nethunter.git kernel
 
-      - name: Install tools
+      - name: Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y clang gcc-aarch64-linux-gnu make bc bison flex libssl-dev libelf-dev
 
-      - name: Generate config
+      - name: Diagnose
         working-directory: kernel
         run: |
           make ARCH=arm64 CC=clang HOSTCC=clang CROSS_COMPILE=aarch64-linux-gnu- a03s_defconfig
 
-      - name: Check RT5370
-        working-directory: kernel
-        run: |
-          echo "===== DEFCONFIG ====="
-          grep -E "CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800USB|RT2800USB_RT53XX)=" arch/arm64/configs/a03s_defconfig || true
+          echo "===== SYMBOL IN SOURCE ====="
+          grep -R -n "WLAN_VENDOR_RALINK" --include='Kconfig*' . | head -30
 
           echo
-          echo "===== GENERATED CONFIG ====="
-          grep -E "CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800USB|RT2800USB_RT53XX)=" .config || true
-
-          echo
-          echo "===== KCONFIG RALINK ====="
-          grep -A12 "config WLAN_VENDOR_RALINK" drivers/net/wireless/ralink/Kconfig
+          echo "===== WIRELESS BLOCK ====="
+          sed -n '1,180p' drivers/net/wireless/Kconfig
 
           echo
           echo "===== FINAL ====="
-          grep -E "CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800USB|RT2800USB_RT53XX)" .config || true
+          grep -n "WLAN_VENDOR_RALINK" .config || true
