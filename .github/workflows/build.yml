@@ -12,29 +12,40 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Descargar codigo del kernel
-        uses: actions/checkout@v4
-        with:
-          ref: android-4.19-stable
-          fetch-depth: 1
-          submodules: false
-
-      - name: Instalar herramientas Kconfig
+      - name: Descargar codigo con Git
         shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            clang \
-            bc \
-            bison \
-            flex \
-            build-essential \
-            libssl-dev \
-            libelf-dev
+          set -e
+
+          echo "========================================"
+          echo "       DESCARGANDO KERNEL A03S"
+          echo "========================================"
+
+          git --version
+
+          git clone \
+            --depth=1 \
+            --branch android-4.19-stable \
+            --single-branch \
+            https://github.com/diego20362/android_kernel_samsung_a03s-nethunter.git \
+            kernel
+
+          cd kernel
+
+          echo ""
+          echo "===== RAMA ====="
+          git branch --show-current
+
+          echo ""
+          echo "===== COMMIT ====="
+          git log -1 --format=%H
 
       - name: Verificar RT5370
         shell: bash
         run: |
+          set -e
+          cd kernel
+
           echo "========================================"
           echo "       VERIFICACION RT5370 A03S"
           echo "========================================"
@@ -120,8 +131,8 @@ jobs:
         with:
           name: a03s-rt5370-diagnostico
           path: |
-            arch/arm64/configs/a03s_defconfig
-            drivers/net/wireless/ralink/rt2x00/Kconfig
-            drivers/net/wireless/ralink/rt2x00/Makefile
+            kernel/arch/arm64/configs/a03s_defconfig
+            kernel/drivers/net/wireless/ralink/rt2x00/Kconfig
+            kernel/drivers/net/wireless/ralink/rt2x00/Makefile
           if-no-files-found: warn
           retention-days: 7
