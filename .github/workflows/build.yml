@@ -63,6 +63,14 @@ jobs:
           echo "===== VERIFICAR OPCIONES DESACTIVADAS ====="
           grep -nE '# CONFIG_(RT2X00|RT2800USB|RT2X00_LIB_USB).*not set' .config || true
 
+          echo "===== DEFINICIONES KCONFIG RT2X00 ====="
+          grep -RniE '^config (RT2X00|RT2800USB|RT2800USB_RT53XX|RT2X00_LIB_USB)' \
+            drivers/net/wireless/ralink/rt2x00/ || true
+
+          echo "===== REFERENCIAS A RT2X00 EN KCONFIG ====="
+          grep -RniE 'source.*rt2x00|menuconfig.*RT2X00|depends on.*RT2X00' \
+            drivers/net/wireless/ralink/ drivers/net/wireless/ || true
+
       - name: Revisar herramientas del compilador
         shell: bash
         run: |
