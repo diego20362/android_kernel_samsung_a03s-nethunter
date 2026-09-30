@@ -1,4 +1,4 @@
-name: RT5370 Kconfig Diagnostic
+name: RT5370 Kconfig Dependency Check
 
 on:
   workflow_dispatch:
@@ -7,142 +7,67 @@ on:
       - android-4.19-stable
 
 jobs:
-  diagnostic:
+  check:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Clone kernel
+      - name: Clone repository
         run: |
           git clone --depth=1 --branch android-4.19-stable \
             https://github.com/diego20362/android_kernel_samsung_a03s-nethunter.git kernel
-          cd kernel
-          git rev-parse HEAD
 
-      - name: Install build tools
+      - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
-            clang \
-            llvm \
-            lld \
-            gcc-aarch64-linux-gnu \
-            binutils-aarch64-linux-gnu \
-            make \
-            bc \
-            bison \
-            flex \
-            libssl-dev \
-            libelf-dev
+          sudo apt-get install -y clang gcc-aarch64-linux-gnu make bc bison flex libssl-dev libelf-dev
 
-      - name: Check RT5370 sources
+      - name: Generate config
         working-directory: kernel
         run: |
-          echo "===== RT5370 SOURCE CHECK ====="
-
-          test -f drivers/net/wireless/ralink/rt2x00/rt2800usb.c \
-            && echo "rt2800usb.c: OK" \
-            || echo "rt2800usb.c: MISSING"
-
-          grep -n "RT2800USB_RT53XX" \
-            drivers/net/wireless/ralink/rt2x00/Kconfig \
-            || true
-
-          grep -n "RT2X00_LIB_USB" \
-            drivers/net/wireless/ralink/rt2x00/Kconfig \
-            || true
-
-          echo
-          echo "===== DEFCONFIG ====="
-
-          grep -nE \
-            "CONFIG_(WIRELESS|WLAN|CFG80211|MAC80211|RT2X00|RT2800USB|RT2800USB_RT53XX|USB)=" \
-            arch/arm64/configs/a03s_defconfig \
-            || true
-
-      - name: Generate configuration
-        working-directory: kernel
-        run: |
-          echo "===== GENERATING .CONFIG ====="
-
           make ARCH=arm64 \
             CC=clang \
             HOSTCC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             a03s_defconfig
 
-      - name: Inspect generated configuration
+      - name: Inspect Ralink conditions
         working-directory: kernel
         run: |
-          echo
-          echo "===== GENERATED .CONFIG ====="
-
+          echo "===== DEFCONFIG RALINK ====="
           grep -nE \
-            "CONFIG_(WIRELESS|WLAN|CFG80211|MAC80211|RT2X00|RT2800USB|RT2800USB_RT53XX|RT2X00_LIB_USB|USB)=" \
-            .config \
-            || true
+            "CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800USB|RT2800USB_RT53XX)" \
+            arch/arm64/configs/a03s_defconfig || true
 
           echo
-          echo "===== RT2X00 CONFIG RESULTS ====="
-
-          for x in \
-            CONFIG_RT2X00 \
-            CONFIG_RT2X00_LIB \
-            CONFIG_RT2X00_LIB_USB \
-            CONFIG_RT2800_LIB \
-            CONFIG_RT2800USB \
-            CONFIG_RT2800USB_RT53XX
-          do
-            if grep -q "^${x}=" .config; then
-              grep "^${x}=" .config
-            else
-              echo "${x}=NOT_PRESENT"
-            fi
-          done
-
-      - name: Check Kconfig dependency chain
-        working-directory: kernel
-        run: |
-          echo
-          echo "===== KCONFIG CHAIN ====="
-
-          echo "--- wireless/Kconfig ---"
-          grep -nE "ralink|rt2x00|source" \
-            drivers/net/wireless/Kconfig \
-            || true
-
-          echo
-          echo "--- ralink/Kconfig ---"
-          if test -f drivers/net/wireless/ralink/Kconfig; then
-            cat drivers/net/wireless/ralink/Kconfig
-          else
-            echo "ralink/Kconfig NOT FOUND"
-          fi
-
-          echo
-          echo "--- rt2x00/Kconfig ---"
+          echo "===== GENERATED CONFIG RALINK ====="
           grep -nE \
-            "config RT2X00|config RT2800USB|RT2800USB_RT53XX|RT2X00_LIB_USB" \
-            drivers/net/wireless/ralink/rt2x00/Kconfig \
-            || true
+            "CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800USB|RT2800USB_RT53XX)" \
+            .config || true
 
-      - name: Final result
-        working-directory: kernel
-        run: |
           echo
-          echo "========================================"
-          echo "FINAL RT5370 DIAGNOSTIC"
-          echo "========================================"
+          echo "===== WIRELESS CONFIG ====="
+          grep -nE \
+            "CONFIG_(WIRELESS|WLAN|CFG80211|MAC80211)" \
+            .config || true
 
-          if grep -q "^CONFIG_RT2800USB=" .config; then
-            echo "RT2800USB: PRESENT"
-          else
-            echo "RT2800USB: MISSING"
-          fi
+          echo
+          echo "===== RALINK KCONFIG ====="
+          cat drivers/net/wireless/ralink/Kconfig
 
-          if grep -q "^CONFIG_RT2800USB_RT53XX=" .config; then
-            echo "RT5370 SUPPORT: PRESENT"
-          else
-            echo "RT5370 SUPPORT: MISSING"
-          fi
+          echo
+          echo "===== RT2X00 MENUCONFIG ====="
+          sed -n '1,280p' drivers/net/wireless/ralink/rt2x00/Kconfig
 
-          echo "========================================"
+          echo
+          echo "===== CONFIGURE RT2X00 DIRECTLY ====="
+          make ARCH=arm64 \
+            CC=clang \
+            HOSTCC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            olddefconfig
+
+          echo
+          echo "===== FINAL RT2X00 VALUES ====="
+          grep -nE \
+            "CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2X00_LIB|RT2X00_LIB_USB|RT2800_LIB|RT2800USB|RT2800USB_RT53XX)" \
+            .config || true
