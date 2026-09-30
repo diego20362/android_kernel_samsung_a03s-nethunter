@@ -1,4 +1,4 @@
-name: RT5370 Kconfig Dependency Check
+name: RT5370 Kconfig Check
 
 on:
   workflow_dispatch:
@@ -11,10 +11,9 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Clone repository
+      - name: Clone kernel
         run: |
-          git clone --depth=1 --branch android-4.19-stable \
-            https://github.com/diego20362/android_kernel_samsung_a03s-nethunter.git kernel
+          git clone --depth=1 --branch android-4.19-stable https://github.com/diego20362/android_kernel_samsung_a03s-nethunter.git kernel
 
       - name: Install tools
         run: |
@@ -24,50 +23,22 @@ jobs:
       - name: Generate config
         working-directory: kernel
         run: |
-          make ARCH=arm64 \
-            CC=clang \
-            HOSTCC=clang \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            a03s_defconfig
+          make ARCH=arm64 CC=clang HOSTCC=clang CROSS_COMPILE=aarch64-linux-gnu- a03s_defconfig
 
-      - name: Inspect Ralink conditions
+      - name: Check RT5370
         working-directory: kernel
         run: |
-          echo "===== DEFCONFIG RALINK ====="
-          grep -nE \
-            "CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800USB|RT2800USB_RT53XX)" \
-            arch/arm64/configs/a03s_defconfig || true
+          echo "===== DEFCONFIG ====="
+          grep -E "CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800USB|RT2800USB_RT53XX)=" arch/arm64/configs/a03s_defconfig || true
 
           echo
-          echo "===== GENERATED CONFIG RALINK ====="
-          grep -nE \
-            "CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800USB|RT2800USB_RT53XX)" \
-            .config || true
+          echo "===== GENERATED CONFIG ====="
+          grep -E "CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800USB|RT2800USB_RT53XX)=" .config || true
 
           echo
-          echo "===== WIRELESS CONFIG ====="
-          grep -nE \
-            "CONFIG_(WIRELESS|WLAN|CFG80211|MAC80211)" \
-            .config || true
+          echo "===== KCONFIG RALINK ====="
+          grep -A12 "config WLAN_VENDOR_RALINK" drivers/net/wireless/ralink/Kconfig
 
           echo
-          echo "===== RALINK KCONFIG ====="
-          cat drivers/net/wireless/ralink/Kconfig
-
-          echo
-          echo "===== RT2X00 MENUCONFIG ====="
-          sed -n '1,280p' drivers/net/wireless/ralink/rt2x00/Kconfig
-
-          echo
-          echo "===== CONFIGURE RT2X00 DIRECTLY ====="
-          make ARCH=arm64 \
-            CC=clang \
-            HOSTCC=clang \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            olddefconfig
-
-          echo
-          echo "===== FINAL RT2X00 VALUES ====="
-          grep -nE \
-            "CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2X00_LIB|RT2X00_LIB_USB|RT2800_LIB|RT2800USB|RT2800USB_RT53XX)" \
-            .config || true
+          echo "===== FINAL ====="
+          grep -E "CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800USB|RT2800USB_RT53XX)" .config || true
