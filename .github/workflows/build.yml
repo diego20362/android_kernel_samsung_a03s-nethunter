@@ -1,4 +1,4 @@
-name: A03s NetHunter - Diagnostico
+name: A03s NetHunter - Verificacion RT5370
 
 on:
   workflow_dispatch:
@@ -7,8 +7,8 @@ permissions:
   contents: read
 
 jobs:
-  inspect:
-    name: Inspeccionar kernel A03s
+  verify:
+    name: Verificar soporte RT5370
     runs-on: ubuntu-22.04
 
     steps:
@@ -19,112 +19,109 @@ jobs:
           fetch-depth: 1
           submodules: false
 
-      - name: Instalar herramientas ARM64 y Clang
+      - name: Instalar herramientas Kconfig
         shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             clang \
-            llvm \
-            lld \
-            gcc-aarch64-linux-gnu \
-            binutils-aarch64-linux-gnu \
-            bc bison flex \
-            libssl-dev libelf-dev \
-            build-essential python3
+            bc \
+            bison \
+            flex \
+            build-essential \
+            libssl-dev \
+            libelf-dev
 
-          echo "===== VERIFICAR CLANG ====="
-          clang --version
-
-          echo "===== VERIFICAR GCC ARM64 ====="
-          aarch64-linux-gnu-gcc --version
-
-          echo "===== VERIFICAR LINKER ARM64 ====="
-          aarch64-linux-gnu-ld --version
-
-          echo "===== VERIFICAR LLD ====="
-          ld.lld --version
-
-      - name: Comprobar configuracion A03s
+      - name: Verificar RT5370
         shell: bash
         run: |
-          echo "===== GENERAR CONFIGURACION ====="
-          make ARCH=arm64 CC=clang HOSTCC=clang CROSS_COMPILE=aarch64-linux-gnu- a03s_defconfig
+          echo "========================================"
+          echo "       VERIFICACION RT5370 A03S"
+          echo "========================================"
 
-          echo "===== VERIFICAR RT5370 ====="
-          grep -nE 'RT2X00|RT2800USB|CFG80211|MAC80211' .config || true
+          echo ""
+          echo "1. ARCHIVOS DEL DRIVER"
+          echo "----------------------------------------"
 
-          echo "===== OPCIONES EN DEFCONFIG ====="
-          grep -nE 'RT2X00|RT2800USB' arch/arm64/configs/a03s_defconfig || true
+          if [ -d "drivers/net/wireless/ralink/rt2x00" ]; then
+            echo "RT2X00: OK"
+          else
+            echo "RT2X00: NO ENCONTRADO"
+          fi
 
-          echo "===== VERIFICAR DEPENDENCIAS USB ====="
-          grep -nE '^CONFIG_USB=|^CONFIG_USB_SUPPORT=' .config || true
+          if [ -f "drivers/net/wireless/ralink/rt2x00/rt2800usb.c" ]; then
+            echo "RT2800USB: OK"
+          else
+            echo "RT2800USB: NO ENCONTRADO"
+          fi
 
-          echo "===== VERIFICAR OPCIONES DESACTIVADAS ====="
-          grep -nE '# CONFIG_(RT2X00|RT2800USB|RT2X00_LIB_USB).*not set' .config || true
+          echo ""
+          echo "2. SOPORTE RT5370 EN KCONFIG"
+          echo "----------------------------------------"
 
-          echo "===== DEFINICIONES KCONFIG RT2X00 ====="
-          grep -RniE '^config (RT2X00|RT2800USB|RT2800USB_RT53XX|RT2X00_LIB_USB)' \
-            drivers/net/wireless/ralink/rt2x00/ || true
+          if grep -q 'config RT2800USB_RT53XX' \
+            drivers/net/wireless/ralink/rt2x00/Kconfig; then
+            echo "RT5370: SOPORTADO"
+          else
+            echo "RT5370: NO ENCONTRADO"
+          fi
 
-          echo "===== REFERENCIAS A RT2X00 EN KCONFIG ====="
-          grep -RniE 'source.*rt2x00|menuconfig.*RT2X00|depends on.*RT2X00' \
-            drivers/net/wireless/ralink/ drivers/net/wireless/ || true
+          if grep -q 'select RT2X00_LIB_USB' \
+            drivers/net/wireless/ralink/rt2x00/Kconfig; then
+            echo "RT2X00_LIB_USB: DISPONIBLE"
+          else
+            echo "RT2X00_LIB_USB: NO ENCONTRADO"
+          fi
 
-      - name: Revisar herramientas del compilador
-        shell: bash
-        run: |
-          echo "===== CLANG DISPONIBLE ====="
-          clang --version || true
+          echo ""
+          echo "3. CONFIGURACION A03S"
+          echo "----------------------------------------"
 
-          echo "===== GCC AARCH64 DISPONIBLE ====="
-          aarch64-linux-gnu-gcc --version || true
-
-          echo "===== BINUTILS AARCH64 ====="
-          aarch64-linux-gnu-ld --version || true
-
-          echo "===== RUTA CLANG DEL MAKEFILE ====="
-          ls -l toolchain/clang/host/linux-x86/clang-r383902/bin/ 2>/dev/null || true
-
-      - name: Revisar kernel y defconfig
-        shell: bash
-        run: |
-          echo "===== VERSION KERNEL ====="
-          head -n 10 Makefile
-
-          echo "===== DEFCONFIG A03S ====="
-          ls arch/arm64/configs/*a03s* 2>/dev/null || true
-
-          echo "===== OPCIONES WIFI ====="
-          grep -nE 'CONFIG_CFG80211|CONFIG_MAC80211|CONFIG_USB=|CONFIG_RT2X00|CONFIG_RT2800' \
+          grep -nE \
+            'CONFIG_(USB|CFG80211|MAC80211|RT2X00|RT2800USB)' \
             arch/arm64/configs/a03s_defconfig || true
 
-      - name: Buscar controlador RT5370
-        shell: bash
-        run: |
-          echo "===== ARCHIVOS RT2X00 ====="
-          find drivers -iname '*rt2x00*' -o -iname '*rt2800*' -o -iname '*5370*'
+          echo ""
+          echo "4. MAKEFILE DEL DRIVER"
+          echo "----------------------------------------"
 
-          echo "===== OPCIONES KCONFIG ====="
-          grep -nE 'config (RT2X00|RT2800USB|RT2800USB_RT53XX|RT2X00_LIB_USB)' \
-            drivers/net/wireless/ralink/rt2x00/Kconfig || true
+          if [ -f "drivers/net/wireless/ralink/rt2x00/Makefile" ]; then
+            echo "Makefile RT2X00: OK"
+            grep -nE 'rt2800usb|rt2x00' \
+              drivers/net/wireless/ralink/rt2x00/Makefile || true
+          else
+            echo "Makefile RT2X00: NO ENCONTRADO"
+          fi
 
-          echo "===== DEPENDENCIAS ====="
-          sed -n '130,195p' drivers/net/wireless/ralink/rt2x00/Kconfig
+          echo ""
+          echo "5. RESULTADO FINAL"
+          echo "----------------------------------------"
 
-          echo "===== MAKEFILE RALINK ====="
-          cat drivers/net/wireless/ralink/rt2x00/Makefile
+          DRIVER_OK=1
 
-      - name: Guardar archivos de diagnostico
+          [ -d "drivers/net/wireless/ralink/rt2x00" ] || DRIVER_OK=0
+          [ -f "drivers/net/wireless/ralink/rt2x00/rt2800usb.c" ] || DRIVER_OK=0
+          grep -q 'config RT2800USB_RT53XX' \
+            drivers/net/wireless/ralink/rt2x00/Kconfig || DRIVER_OK=0
+          grep -q 'select RT2X00_LIB_USB' \
+            drivers/net/wireless/ralink/rt2x00/Kconfig || DRIVER_OK=0
+
+          if [ "$DRIVER_OK" -eq 1 ]; then
+            echo "RT5370: OK"
+          else
+            echo "RT5370: REVISAR"
+          fi
+
+          echo "========================================"
+
+      - name: Guardar diagnostico
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: a03s-diagnostico
+          name: a03s-rt5370-diagnostico
           path: |
-            .config
-            Makefile
-            arch/arm64/configs/
-            drivers/net/wireless/ralink/rt2x00/
-          include-hidden-files: true
+            arch/arm64/configs/a03s_defconfig
+            drivers/net/wireless/ralink/rt2x00/Kconfig
+            drivers/net/wireless/ralink/rt2x00/Makefile
           if-no-files-found: warn
           retention-days: 7
