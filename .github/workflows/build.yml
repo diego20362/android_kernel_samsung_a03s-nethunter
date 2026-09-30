@@ -1,4 +1,4 @@
-name: A03s NetHunter - Diagnostico Configuracion
+name: A03s NetHunter - Diagnostico RT5370
 
 on:
   workflow_dispatch:
@@ -7,21 +7,15 @@ permissions:
   contents: read
 
 jobs:
-  verify:
-    name: Generar .config A03s
+  diagnostico:
+    name: Investigar RT5370 en Kconfig
     runs-on: ubuntu-22.04
 
     steps:
-      - name: Descargar codigo con Git
+      - name: Descargar kernel
         shell: bash
         run: |
           set -e
-
-          echo "========================================"
-          echo "       DESCARGANDO KERNEL A03S"
-          echo "========================================"
-
-          git --version
 
           git clone \
             --depth=1 \
@@ -32,7 +26,6 @@ jobs:
 
           cd kernel
 
-          echo ""
           echo "===== RAMA ====="
           git branch --show-current
 
@@ -58,7 +51,7 @@ jobs:
             libelf-dev \
             python3
 
-      - name: Generar configuracion A03s
+      - name: Generar .config
         shell: bash
         run: |
           set -e
@@ -76,39 +69,69 @@ jobs:
             a03s_defconfig
 
           echo ""
-          echo "===== COMPROBAR .config ====="
+          echo "===== 1. DEFCONFIG ORIGINAL ====="
 
-          if [ -f ".config" ]; then
-            echo ".config: OK"
-            ls -lh .config
-          else
-            echo ".config: NO GENERADO"
-            exit 1
-          fi
+          grep -nE \
+            'CONFIG_(RT2X00|RT2800USB|RT2800USB_RT53XX|RT2X00_LIB_USB)' \
+            arch/arm64/configs/a03s_defconfig || true
 
           echo ""
-          echo "===== OPCIONES RT5370 EN .config ====="
+          echo "===== 2. CONFIG GENERADO ====="
+
           grep -nE \
             'CONFIG_(RT2X00|RT2800USB|RT2800USB_RT53XX|RT2X00_LIB_USB)' \
             .config || true
 
           echo ""
-          echo "===== OPCIONES WIFI ====="
+          echo "===== 3. KCONFIG RT2X00 ====="
+
           grep -nE \
-            'CONFIG_(CFG80211|MAC80211)' \
+            'config RT2800USB|config RT2800USB_RT53XX|select RT2X00_LIB_USB|config RT2X00_LIB_USB' \
+            drivers/net/wireless/ralink/rt2x00/Kconfig || true
+
+          echo ""
+          echo "===== 4. MAKEFILE RT2X00 ====="
+
+          cat drivers/net/wireless/ralink/rt2x00/Makefile
+
+          echo ""
+          echo "===== 5. ARCHIVOS RT2800USB ====="
+
+          ls -lh \
+            drivers/net/wireless/ralink/rt2x00/rt2800usb.c \
+            drivers/net/wireless/ralink/rt2x00/rt2800usb.h \
+            drivers/net/wireless/ralink/rt2x00/Kconfig \
+            drivers/net/wireless/ralink/rt2x00/Makefile
+
+          echo ""
+          echo "===== 6. OPCIONES USB/WIFI ====="
+
+          grep -nE \
+            '^CONFIG_(USB_SUPPORT|USB|CFG80211|MAC80211)=' \
             .config || true
 
           echo ""
-          echo "===== OPCIONES USB ====="
-          grep -nE \
-            '^CONFIG_USB_SUPPORT=|^CONFIG_USB=' \
-            .config || true
+          echo "===== 7. BUSCAR RT2800USB EN TODO EL KERNEL ====="
 
-      - name: Guardar .config y diagnostico
+          grep -Rns \
+            'RT2800USB_RT53XX' \
+            drivers/net/wireless/ralink/rt2x00 \
+            arch/arm64/configs \
+            2>/dev/null || true
+
+          echo ""
+          echo "===== 8. BUSCAR RT2X00_LIB_USB ====="
+
+          grep -Rns \
+            'RT2X00_LIB_USB' \
+            drivers/net/wireless/ralink/rt2x00 \
+            2>/dev/null || true
+
+      - name: Guardar diagnostico
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: a03s-config-diagnostico
+          name: a03s-diagnostico-rt5370
           path: |
             kernel/.config
             kernel/arch/arm64/configs/a03s_defconfig
