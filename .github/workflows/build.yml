@@ -1,4 +1,4 @@
-name: A03s NetHunter - Diagnostico RT5370
+name: A03s NetHunter - Diagnostico Inclusion RT5370
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   diagnostico:
-    name: Investigar configuracion RT5370
+    name: Investigar inclusion Kconfig RT2X00
     runs-on: ubuntu-22.04
 
     steps:
@@ -24,8 +24,6 @@ jobs:
           echo "========================================"
           echo "       DESCARGANDO KERNEL A03S"
           echo "========================================"
-
-          git --version
 
           git clone \
             --depth=1 \
@@ -53,10 +51,6 @@ jobs:
         run: |
           set -e
 
-          echo "========================================"
-          echo "       INSTALANDO HERRAMIENTAS"
-          echo "========================================"
-
           sudo apt-get update
 
           sudo apt-get install -y \
@@ -75,7 +69,168 @@ jobs:
 
 
       # ============================================================
-      # 3. GENERAR .CONFIG
+      # 3. LOCALIZAR KCONFIG RT2X00
+      # ============================================================
+      - name: Localizar archivos Kconfig
+        shell: bash
+        run: |
+          set -e
+
+          cd kernel
+
+          echo "========================================"
+          echo "       ARCHIVOS KCONFIG"
+          echo "========================================"
+
+          echo ""
+          echo "===== KCONFIG DEL DRIVER ====="
+
+          find drivers/net/wireless/ralink \
+            -name 'Kconfig*' \
+            -type f \
+            -print \
+            | sort
+
+          echo ""
+          echo "===== RT2X00 ====="
+
+          ls -lh \
+            drivers/net/wireless/ralink/rt2x00/Kconfig \
+            drivers/net/wireless/ralink/rt2x00/Makefile
+
+
+      # ============================================================
+      # 4. BUSCAR INCLUSIONES RT2X00
+      # ============================================================
+      - name: Buscar inclusion RT2X00
+        shell: bash
+        run: |
+          set -e
+
+          cd kernel
+
+          echo "========================================"
+          echo "       CADENA DE INCLUSION"
+          echo "========================================"
+
+          echo ""
+          echo "===== INCLUDE RT2X00 ====="
+
+          grep -Rns \
+            'source.*rt2x00' \
+            drivers \
+            arch \
+            2>/dev/null || true
+
+          echo ""
+          echo "===== INCLUDE RALINK ====="
+
+          grep -Rns \
+            'source.*ralink' \
+            drivers/net \
+            2>/dev/null || true
+
+          echo ""
+          echo "===== REFERENCIAS RT2X00 ====="
+
+          grep -Rns \
+            'rt2x00/Kconfig' \
+            drivers \
+            arch \
+            2>/dev/null || true
+
+
+      # ============================================================
+      # 5. MOSTRAR KCONFIG SUPERIORES
+      # ============================================================
+      - name: Mostrar Kconfig superiores
+        shell: bash
+        run: |
+          set -e
+
+          cd kernel
+
+          echo "========================================"
+          echo "       KCONFIG SUPERIORES"
+          echo "========================================"
+
+          echo ""
+          echo "===== drivers/net/wireless/Kconfig ====="
+
+          if [ -f drivers/net/wireless/Kconfig ]; then
+            cat drivers/net/wireless/Kconfig
+          else
+            echo "NO EXISTE"
+          fi
+
+          echo ""
+          echo "===== drivers/net/wireless/ralink/Kconfig ====="
+
+          if [ -f drivers/net/wireless/ralink/Kconfig ]; then
+            cat drivers/net/wireless/ralink/Kconfig
+          else
+            echo "NO EXISTE"
+          fi
+
+
+      # ============================================================
+      # 6. MOSTRAR ESTRUCTURA RALINK
+      # ============================================================
+      - name: Revisar estructura Ralink
+        shell: bash
+        run: |
+          set -e
+
+          cd kernel
+
+          echo "========================================"
+          echo "       ESTRUCTURA RALINK"
+          echo "========================================"
+
+          find drivers/net/wireless/ralink \
+            -maxdepth 2 \
+            -type f \
+            | sort
+
+
+      # ============================================================
+      # 7. REVISAR DEFINICIONES RT2X00
+      # ============================================================
+      - name: Revisar definiciones RT2X00
+        shell: bash
+        run: |
+          set -e
+
+          cd kernel
+
+          echo "========================================"
+          echo "       DEFINICIONES RT2X00"
+          echo "========================================"
+
+          echo ""
+          echo "===== RT2X00 ====="
+
+          grep -n -A20 -B5 \
+            'config RT2X00' \
+            drivers/net/wireless/ralink/rt2x00/Kconfig || true
+
+          echo ""
+          echo "===== RT2800USB ====="
+
+          grep -n -A20 -B5 \
+            'config RT2800USB' \
+            drivers/net/wireless/ralink/rt2x00/Kconfig || true
+
+          echo ""
+          echo "===== RT2800USB_RT53XX ====="
+
+          grep -n -A15 -B5 \
+            'config RT2800USB_RT53XX' \
+            drivers/net/wireless/ralink/rt2x00/Kconfig || true
+
+
+      # ============================================================
+      # 8. GENERAR .CONFIG
       # ============================================================
       - name: Generar configuracion A03s
         shell: bash
@@ -96,9 +251,9 @@ jobs:
             a03s_defconfig
 
           echo ""
-          echo "===== COMPROBAR .config ====="
+          echo "===== .CONFIG ====="
 
-          if [ -f ".config" ]; then
+          if [ -f .config ]; then
             echo ".config: OK"
             ls -lh .config
           else
@@ -108,9 +263,9 @@ jobs:
 
 
       # ============================================================
-      # 4. COMPARAR DEFCONFIG CONTRA .CONFIG
+      # 9. COMPARAR DEFCONFIG Y .CONFIG
       # ============================================================
-      - name: Comparar RT5370
+      - name: Comparar configuraciones RT5370
         shell: bash
         run: |
           set -e
@@ -118,78 +273,42 @@ jobs:
           cd kernel
 
           echo "========================================"
-          echo "       COMPARACION RT5370"
+          echo "       COMPARACION FINAL"
           echo "========================================"
 
           echo ""
-          echo "===== 1. DEFCONFIG ORIGINAL ====="
+          echo "===== DEFCONFIG ====="
 
           grep -nE \
             'CONFIG_(RT2X00|RT2800USB|RT2800USB_RT53XX|RT2X00_LIB_USB)' \
             arch/arm64/configs/a03s_defconfig || true
 
           echo ""
-          echo "===== 2. CONFIG GENERADO ====="
+          echo "===== .CONFIG ====="
 
           grep -nE \
             'CONFIG_(RT2X00|RT2800USB|RT2800USB_RT53XX|RT2X00_LIB_USB)' \
             .config || true
-
-
-      # ============================================================
-      # 5. INVESTIGAR DEPENDENCIAS
-      # ============================================================
-      - name: Investigar dependencias Kconfig
-        shell: bash
-        run: |
-          set -e
-
-          cd kernel
-
-          echo "========================================"
-          echo "       DEPENDENCIAS KCONFIG"
-          echo "========================================"
 
           echo ""
           echo "===== WLAN ====="
 
           grep -nE \
-            '^CONFIG_(WLAN|WIRELESS)=' \
+            '^CONFIG_(WIRELESS|WLAN|CFG80211|MAC80211)=' \
             .config || true
 
           echo ""
-          echo "===== DEPENDENCIAS RT2X00 ====="
+          echo "===== USB ====="
 
           grep -nE \
-            '^CONFIG_(MAC80211|USB|HAS_DMA|WLAN|RT2X00|RT2800)' \
-            .config || true
-
-          echo ""
-          echo "===== RT2800USB EN DEFCONFIG ====="
-
-          grep -n -A5 -B5 \
-            'CONFIG_RT2800USB' \
-            arch/arm64/configs/a03s_defconfig || true
-
-          echo ""
-          echo "===== RT2X00 EN DEFCONFIG ====="
-
-          grep -n -A5 -B5 \
-            'CONFIG_RT2X00' \
-            arch/arm64/configs/a03s_defconfig || true
-
-          echo ""
-          echo "===== CONFIGURACION WIFI/USB ====="
-
-          grep -nE \
-            '^CONFIG_(NET|WIRELESS|WLAN|MAC80211|CFG80211|USB)=' \
+            '^CONFIG_(USB_SUPPORT|USB|HAS_DMA)=' \
             .config || true
 
 
       # ============================================================
-      # 6. ANALIZAR RESULTADO
+      # 10. BUSCAR POSIBLES CONDICIONES
       # ============================================================
-      - name: Analizar resultado
+      - name: Buscar condiciones RT2X00
         shell: bash
         run: |
           set -e
@@ -197,200 +316,63 @@ jobs:
           cd kernel
 
           echo "========================================"
-          echo "       ANALISIS AUTOMATICO"
+          echo "       CONDICIONES RT2X00"
           echo "========================================"
 
           echo ""
-
-          if grep -qE '^CONFIG_WLAN=(y|m)' .config; then
-            echo "WLAN: ACTIVADO"
-          else
-            echo "WLAN: NO ACTIVADO"
-          fi
-
-          if grep -qE '^CONFIG_HAS_DMA=(y|m)' .config; then
-            echo "HAS_DMA: ACTIVADO"
-          else
-            echo "HAS_DMA: NO ENCONTRADO"
-          fi
-
-          if grep -qE '^CONFIG_MAC80211=(y|m)' .config; then
-            echo "MAC80211: ACTIVADO"
-          else
-            echo "MAC80211: NO ACTIVADO"
-          fi
-
-          if grep -qE '^CONFIG_USB=(y|m)' .config; then
-            echo "USB: ACTIVADO"
-          else
-            echo "USB: NO ACTIVADO"
-          fi
-
-          echo ""
-
-          if grep -q '^CONFIG_RT2X00=' .config; then
-            echo "RT2X00: PRESENTE"
-          else
-            echo "RT2X00: AUSENTE"
-          fi
-
-          if grep -q '^CONFIG_RT2800USB=' .config; then
-            echo "RT2800USB: PRESENTE"
-          else
-            echo "RT2800USB: AUSENTE"
-          fi
-
-          if grep -q '^CONFIG_RT2800USB_RT53XX=' .config; then
-            echo "RT2800USB_RT53XX: PRESENTE"
-          else
-            echo "RT2800USB_RT53XX: AUSENTE"
-          fi
-
-          if grep -q '^CONFIG_RT2X00_LIB_USB=' .config; then
-            echo "RT2X00_LIB_USB: PRESENTE"
-          else
-            echo "RT2X00_LIB_USB: AUSENTE"
-          fi
-
-
-      # ============================================================
-      # 7. REVISAR KCONFIG DEL DRIVER
-      # ============================================================
-      - name: Revisar Kconfig RT2X00
-        shell: bash
-        run: |
-          set -e
-
-          cd kernel
-
-          echo "========================================"
-          echo "       KCONFIG RT2X00"
-          echo "========================================"
-
-          echo ""
-          echo "===== CONFIG RT2800USB ====="
-
-          grep -n -A15 -B5 \
-            'config RT2800USB' \
-            drivers/net/wireless/ralink/rt2x00/Kconfig || true
-
-          echo ""
-          echo "===== CONFIG RT2800USB_RT53XX ====="
-
-          grep -n -A12 -B5 \
-            'config RT2800USB_RT53XX' \
-            drivers/net/wireless/ralink/rt2x00/Kconfig || true
-
-          echo ""
-          echo "===== CONFIG RT2X00_LIB_USB ====="
-
-          grep -n -A12 -B5 \
-            'config RT2X00_LIB_USB' \
-            drivers/net/wireless/ralink/rt2x00/Kconfig || true
-
-          echo ""
-          echo "===== SELECT RT2X00_LIB_USB ====="
+          echo "===== DEPENDENCIAS ====="
 
           grep -n \
-            'select RT2X00_LIB_USB' \
-            drivers/net/wireless/ralink/rt2x00/Kconfig || true
-
-
-      # ============================================================
-      # 8. REVISAR MAKEFILE
-      # ============================================================
-      - name: Revisar Makefile RT2X00
-        shell: bash
-        run: |
-          set -e
-
-          cd kernel
-
-          echo "========================================"
-          echo "       MAKEFILE RT2X00"
-          echo "========================================"
-
-          cat \
-            drivers/net/wireless/ralink/rt2x00/Makefile
-
-
-      # ============================================================
-      # 9. COMPROBAR ARCHIVOS DEL DRIVER
-      # ============================================================
-      - name: Comprobar archivos RT2800USB
-        shell: bash
-        run: |
-          set -e
-
-          cd kernel
-
-          echo "========================================"
-          echo "       ARCHIVOS RT2800USB"
-          echo "========================================"
-
-          ls -lh \
+            -E 'depends on|select ' \
             drivers/net/wireless/ralink/rt2x00/Kconfig \
-            drivers/net/wireless/ralink/rt2x00/Makefile \
-            drivers/net/wireless/ralink/rt2x00/rt2800usb.c \
-            drivers/net/wireless/ralink/rt2x00/rt2800usb.h
+            | head -80
 
-
-      # ============================================================
-      # 10. BUSCAR RT2800USB
-      # ============================================================
-      - name: Buscar RT2800USB en kernel
-        shell: bash
-        run: |
-          set -e
-
-          cd kernel
-
-          echo "========================================"
-          echo "       BUSQUEDA RT2800USB"
-          echo "========================================"
+          echo ""
+          echo "===== SYMBOL RT2800USB ====="
 
           grep -Rns \
-            'RT2800USB_RT53XX' \
-            drivers/net/wireless/ralink/rt2x00 \
-            arch/arm64/configs \
-            2>/dev/null || true
-
-
-      # ============================================================
-      # 11. BUSCAR RT2X00_LIB_USB
-      # ============================================================
-      - name: Buscar RT2X00_LIB_USB
-        shell: bash
-        run: |
-          set -e
-
-          cd kernel
-
-          echo "========================================"
-          echo "       BUSQUEDA RT2X00_LIB_USB"
-          echo "========================================"
-
-          grep -Rns \
-            'RT2X00_LIB_USB' \
+            'RT2800USB' \
             drivers/net/wireless/ralink/rt2x00 \
             2>/dev/null || true
 
 
       # ============================================================
-      # 12. GUARDAR TODO EL DIAGNOSTICO
+      # 11. GUARDAR DIAGNOSTICO
       # ============================================================
       - name: Guardar diagnostico
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: a03s-diagnostico-rt5370
+          name: a03s-diagnostico-inclusion-rt5370
           path: |
             kernel/.config
             kernel/arch/arm64/configs/a03s_defconfig
+            kernel/drivers/net/wireless/Kconfig
+            kernel/drivers/net/wireless/ralink/Kconfig
             kernel/drivers/net/wireless/ralink/rt2x00/Kconfig
             kernel/drivers/net/wireless/ralink/rt2x00/Makefile
-            kernel/drivers/net/wireless/ralink/rt2x00/rt2800usb.c
-            kernel/drivers/net/wireless/ralink/rt2x00/rt2800usb.h
           include-hidden-files: true
           if-no-files-found: warn
           retention-days: 7
+
+Qué necesito de esta ejecución
+
+Cuando termine, no necesitas copiar todo el log. Pásame solamente estos tres bloques:
+
+===== INCLUDE RT2X00 =====
+
+===== INCLUDE RALINK =====
+
+y:
+
+===== drivers/net/wireless/ralink/Kconfig =====
+
+Si "ralink/Kconfig" dice "NO EXISTE", pásame eso también.
+
+Con esos datos podremos saber si el problema está en la cadena de "source" de Kconfig. Después de eso sí podremos hacer la modificación concreta y pasar a comprobar que aparezca:
+
+CONFIG_RT2X00=m
+CONFIG_RT2800USB=m
+CONFIG_RT2800USB_RT53XX=y
+
+en ".config", antes de intentar cualquier compilación.
