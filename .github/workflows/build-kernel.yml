@@ -1,0 +1,101 @@
+name: Build A03s Kernel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Clone kernel
+        run: |
+          git clone --depth=1 --branch android-4.19-stable https://github.com/diego20362/android_kernel_samsung_a03s-nethunter.git kernel
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang \
+            gcc-aarch64-linux-gnu \
+            make \
+            bc \
+            bison \
+            flex \
+            libssl-dev \
+            libelf-dev \
+            pahole
+
+      - name: Generate configuration
+        working-directory: kernel
+        run: |
+          make ARCH=arm64 \
+            CC=clang \
+            HOSTCC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            a03s_defconfig
+
+      - name: Verify RT5370 configuration
+        working-directory: kernel
+        run: |
+          echo "===== RT5370 CONFIG ====="
+          grep -E '^CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800_LIB|RT2800USB)' .config || true
+
+      - name: Build kernel
+        working-directory: kernel
+        run: |
+          make -j2 \
+            ARCH=arm64 \
+            CC=clang \
+            HOSTCC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            Image.gz \
+            modules
+
+      - name: Install modules
+        working-directory: kernel
+        run: |
+          mkdir -p ../modules
+          make -j2 \
+            ARCH=arm64 \
+            CC=clang \
+            HOSTCC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            modules_install \
+            INSTALL_MOD_PATH=../modules
+
+      - name: Verify build outputs
+        working-directory: kernel
+        run: |
+          echo "===== KERNEL ====="
+          ls -lh arch/arm64/boot/Image.gz
+
+          echo
+          echo "===== RT2X00 MODULES ====="
+          find drivers/net/wireless/ralink/rt2x00 \
+            -type f \
+            \( -name 'rt2800usb.ko' -o -name 'rt2800lib.ko' -o -name 'rt2x00*.ko' \) \
+            -print
+
+          echo
+          echo "===== ALL MODULES ====="
+          find ../modules -name '*.ko' | head -50
+
+      - name: Package results
+        run: |
+          mkdir -p artifact
+
+          cp kernel/arch/arm64/boot/Image.gz artifact/
+
+          if [ -d modules ]; then
+            tar -czf artifact/modules.tar.gz modules
+          fi
+
+          echo "===== ARTIFACTS ====="
+          ls -lh artifact
+
+      - name: Upload kernel
+        uses: actions/upload-artifact@v4
+        with:
+          name: a03s-kernel-build
+          path: artifact/
