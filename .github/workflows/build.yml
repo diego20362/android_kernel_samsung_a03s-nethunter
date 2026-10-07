@@ -35,3 +35,7 @@ jobs:
           echo
           echo "===== FINAL ====="
           grep -n "WLAN_VENDOR_RALINK" .config || true
+
+          echo
+          echo "===== RT2X00 CONFIG RESULTS ====="
+          grep -E '^CONFIG_(RT2X00|RT2800_LIB|RT2800USB)' .config || true
