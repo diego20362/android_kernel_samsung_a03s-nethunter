@@ -44,13 +44,23 @@ jobs:
       - name: Build kernel
         working-directory: kernel
         run: |
+          set +e
+
           make -j2 \
             ARCH=arm64 \
             CC=clang \
             HOSTCC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
             Image.gz \
-            modules
+            modules 2>&1 | tee build.log
+
+          BUILD_STATUS=${PIPESTATUS[0]}
+
+          echo
+          echo "===== ÚLTIMAS 100 LÍNEAS DEL BUILD ====="
+          tail -n 100 build.log
+
+          exit $BUILD_STATUS
 
       - name: Install modules
         working-directory: kernel
