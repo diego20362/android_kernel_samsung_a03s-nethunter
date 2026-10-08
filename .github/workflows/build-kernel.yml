@@ -8,13 +8,18 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
+
       - name: Clone kernel
         run: |
-          git clone --depth=1 --branch android-4.19-stable https://github.com/diego20362/android_kernel_samsung_a03s-nethunter.git kernel
+          git clone --depth=1 \
+            --branch android-4.19-stable \
+            https://github.com/diego20362/android_kernel_samsung_a03s-nethunter.git \
+            kernel
 
       - name: Install build tools
         run: |
           sudo apt-get update
+
           sudo apt-get install -y \
             clang \
             gcc-aarch64-linux-gnu \
@@ -25,7 +30,15 @@ jobs:
             libssl-dev \
             libelf-dev \
             pahole \
-            xz-utils
+            xz-utils \
+            cpio
+
+          echo "===== TOOLS ====="
+          clang --version | head -n 1
+          aarch64-linux-gnu-gcc --version | head -n 1
+          make --version | head -n 1
+          cpio --version | head -n 1
+          xz --version | head -n 1
 
       - name: Generate configuration
         working-directory: kernel
@@ -40,7 +53,16 @@ jobs:
         working-directory: kernel
         run: |
           echo "===== RT5370 CONFIG ====="
-          grep -E '^CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800_LIB|RT2800USB)' .config || true
+
+          grep -E \
+            '^CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800_LIB|RT2800USB)' \
+            .config || true
+
+          echo "===== RT5370 SUPPORT ====="
+
+          grep -E \
+            'CONFIG_RT2800USB_RT53XX|CONFIG_RT2800USB=' \
+            .config || true
 
       - name: Fix MTK Ftrace
         working-directory: kernel
@@ -51,40 +73,102 @@ jobs:
           test -f kernel/trace/Makefile
 
           echo "===== TRACE_INCLUDE_PATH ANTES ====="
-          grep -n "TRACE_INCLUDE_PATH" kernel/trace/mtk_ftrace.h || true
+          grep -n "TRACE_INCLUDE_PATH" \
+            kernel/trace/mtk_ftrace.h || true
 
           echo "===== MAKEFILE ANTES ====="
-          grep -n "CFLAGS_mtk_trace" kernel/trace/Makefile || true
+          grep -n "CFLAGS_mtk_trace" \
+            kernel/trace/Makefile || true
 
-          sed -i 's/^#define TRACE_INCLUDE_PATH .*/#define TRACE_INCLUDE_PATH ./' kernel/trace/mtk_ftrace.h
+          sed -i \
+            's/^#define TRACE_INCLUDE_PATH .*/#define TRACE_INCLUDE_PATH ./' \
+            kernel/trace/mtk_ftrace.h
 
-          sed -i '/^CFLAGS_mtk_trace\.o := -I$(src)$/d' kernel/trace/Makefile
+          sed -i \
+            '/^CFLAGS_mtk_trace\.o := -I$(src)$/d' \
+            kernel/trace/Makefile
 
-          printf '\nCFLAGS_mtk_trace.o := -I$(src)\n' >> kernel/trace/Makefile
+          printf '\nCFLAGS_mtk_trace.o := -I$(src)\n' \
+            >> kernel/trace/Makefile
 
           echo "===== TRACE_INCLUDE_PATH DESPUÉS ====="
-          grep -n "TRACE_INCLUDE_PATH" kernel/trace/mtk_ftrace.h || true
+          grep -n "TRACE_INCLUDE_PATH" \
+            kernel/trace/mtk_ftrace.h || true
 
           echo "===== MAKEFILE DESPUÉS ====="
           tail -n 10 kernel/trace/Makefile
+
+      - name: Fix kheaders cpio path
+        working-directory: kernel
+        run: |
+          echo "===== CPIO ====="
+
+          CPIO_PATH="$(command -v cpio)"
+
+          echo "CPIO PATH: $CPIO_PATH"
+
+          test -x "$CPIO_PATH"
+
+          echo "===== GEN_KHEADERS ANTES ====="
+
+          nl -ba kernel/gen_kheaders.sh | \
+            sed -n '55,68p'
+
+          echo "===== REEMPLAZANDO RUTA ====="
+
+          sed -i \
+            "s#/tools/build/cpio#$CPIO_PATH#g" \
+            kernel/gen_kheaders.sh
+
+          echo "===== GEN_KHEADERS DESPUÉS ====="
+
+          nl -ba kernel/gen_kheaders.sh | \
+            sed -n '55,68p'
+
+          echo "===== VERIFICACIÓN ====="
+
+          if grep -q "/tools/build/cpio" kernel/gen_kheaders.sh; then
+            echo "ERROR: todavía existe /tools/build/cpio"
+            exit 1
+          fi
+
+          echo "OK: gen_kheaders.sh utilizará $CPIO_PATH"
 
       - name: Diagnose trace headers
         working-directory: kernel
         run: |
           echo "===== MTK FTRACE ====="
-          find . -type f -name 'mtk_ftrace.h' -print || true
+
+          find . \
+            -type f \
+            -name 'mtk_ftrace.h' \
+            -print || true
 
           echo "===== MTK TRACE ====="
-          find . -type f -name 'mtk_trace.c' -print || true
+
+          find . \
+            -type f \
+            -name 'mtk_trace.c' \
+            -print || true
 
           echo "===== TRACE MMSTAT ====="
-          find . -type f -name 'trace_mmstat.h' -print || true
+
+          find . \
+            -type f \
+            -name 'trace_mmstat.h' \
+            -print || true
 
           echo "===== TRACE INCLUDE PATH ====="
-          grep -n -A2 -B2 "TRACE_INCLUDE_PATH" kernel/trace/mtk_ftrace.h || true
+
+          grep -n -A2 -B2 \
+            "TRACE_INCLUDE_PATH" \
+            kernel/trace/mtk_ftrace.h || true
 
           echo "===== MTK TRACE MAKEFILE ====="
-          grep -n "CFLAGS_mtk_trace" kernel/trace/Makefile || true
+
+          grep -n \
+            "CFLAGS_mtk_trace" \
+            kernel/trace/Makefile || true
 
       - name: Build kernel
         working-directory: kernel
@@ -103,11 +187,13 @@ jobs:
           BUILD_STATUS=${PIPESTATUS[0]}
 
           echo "===== ERRORES REALES ====="
+
           grep -n -E \
             "error:|fatal error|undefined reference|Error 1|Error 2|Error 127" \
             build.log | tail -50 || true
 
           echo "===== ÚLTIMAS 150 LÍNEAS ====="
+
           tail -n 150 build.log
 
           exit $BUILD_STATUS
@@ -131,30 +217,60 @@ jobs:
         working-directory: kernel
         run: |
           echo "===== KERNEL ====="
-          ls -lh arch/arm64/boot/Image.gz
+
+          ls -lh \
+            arch/arm64/boot/Image.gz
+
+          echo "===== KERNEL SHA256 ====="
+
+          sha256sum \
+            arch/arm64/boot/Image.gz
 
           echo "===== RT2X00 MODULES ====="
+
           find drivers/net/wireless/ralink/rt2x00 \
             -type f \
-            \( -name 'rt2800usb.ko' -o -name 'rt2800lib.ko' -o -name 'rt2x00*.ko' \) \
+            \( \
+              -name 'rt2800usb.ko' \
+              -o -name 'rt2800lib.ko' \
+              -o -name 'rt2x00*.ko' \
+            \) \
             -print
 
           echo "===== ALL MODULES ====="
-          find ../modules -name '*.ko' | head -50
+
+          find ../modules \
+            -name '*.ko' \
+            -print | head -100
+
+          echo "===== RT2800USB MODULE CHECK ====="
+
+          find . \
+            -name 'rt2800usb.ko' \
+            -print || true
 
       - name: Package results
         if: success()
         run: |
           mkdir -p artifact
 
-          cp kernel/arch/arm64/boot/Image.gz artifact/
+          cp \
+            kernel/arch/arm64/boot/Image.gz \
+            artifact/
 
           if [ -d modules ]; then
-            tar -czf artifact/modules.tar.gz modules
+            tar -czf \
+              artifact/modules.tar.gz \
+              modules
           fi
 
           echo "===== ARTIFACTS ====="
+
           ls -lh artifact
+
+          echo "===== SHA256 ====="
+
+          sha256sum artifact/*
 
       - name: Upload kernel
         if: success()
