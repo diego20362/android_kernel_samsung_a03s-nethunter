@@ -1,139 +1,25 @@
-name: Build A03s Kernel
+- name: Build kernel
+          working-directory: kernel
+          run: |
+            set +e
 
-on:
-  workflow_dispatch:
+            make -j1 \
+              ARCH=arm64 \
+              CC=clang \
+              HOSTCC=clang \
+              CROSS_COMPILE=aarch64-linux-gnu- \
+              KCFLAGS="-gdwarf-4 -I$PWD" \
+              Image.gz \
+              modules 2>&1 | tee build.log
 
-jobs:
-  build:
-    runs-on: ubuntu-22.04
+            BUILD_STATUS=${PIPESTATUS[0]}
 
-    steps:
-      - name: Clone kernel
-        run: |
-          git clone --depth=1 --branch android-4.19-stable https://github.com/diego20362/android_kernel_samsung_a03s-nethunter.git kernel
+            echo "===== ERRORES REALES ====="
+            grep -n -E \
+              "error:|fatal error:|undefined reference|Error 1|Error 2" \
+              build.log | tail -50 || true
 
-      - name: Install build tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y clang gcc-aarch64-linux-gnu make bc bison flex libssl-dev libelf-dev pahole
+            echo "===== ÚLTIMAS 150 LÍNEAS ====="
+            tail -n 150 build.log
 
-      - name: Generate configuration
-        working-directory: kernel
-        run: |
-          make ARCH=arm64 \
-            CC=clang \
-            HOSTCC=clang \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            a03s_defconfig
-
-      - name: Verify RT5370 configuration
-        working-directory: kernel
-        run: |
-          echo "===== RT5370 CONFIG ====="
-          grep -E '^CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800_LIB|RT2800USB)' .config || true
-
-      - name: Fix MTK Ftrace include path
-        working-directory: kernel
-        run: |
-          echo "===== ANTES ====="
-          grep -n "TRACE_INCLUDE_PATH" kernel/trace/mtk_ftrace.h || true
-
-          sed -i 's/^#define TRACE_INCLUDE_PATH \.$/#define TRACE_INCLUDE_PATH kernel\/trace/' kernel/trace/mtk_ftrace.h
-
-          echo "===== DESPUÉS ====="
-          grep -n "TRACE_INCLUDE_PATH" kernel/trace/mtk_ftrace.h || true
-
-          test -f kernel/trace/mtk_ftrace.h
-
-      - name: Diagnose MediaTek trace files
-        working-directory: kernel
-        run: |
-          echo "===== MTK FTRACE ====="
-          find . -type f -name 'mtk_ftrace.h' -print || true
-
-          echo "===== MTK TRACE ====="
-          find . -type f -name 'mtk_trace.c' -print || true
-
-          echo "===== TRACE_INCLUDE_PATH ====="
-          grep -n -A2 -B2 "TRACE_INCLUDE_PATH" kernel/trace/mtk_ftrace.h || true
-
-          echo "===== REFERENCIAS ====="
-          grep -R -n \
-            -E 'TRACE_INCLUDE_FILE|mtk_ftrace|mtk_trace' \
-            kernel/trace include/trace 2>/dev/null | head -100 || true
-
-      - name: Build kernel
-        working-directory: kernel
-        run: |
-          set +e
-
-          make -j1 \
-            ARCH=arm64 \
-            CC=clang \
-            HOSTCC=clang \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            KCFLAGS=-gdwarf-4 \
-            Image.gz \
-            modules 2>&1 | tee build.log
-
-          BUILD_STATUS=${PIPESTATUS[0]}
-
-          echo "===== ERRORES REALES ====="
-          grep -n -E \
-            "error:|fatal error:|undefined reference|Error 1|Error 2" \
-            build.log | tail -50 || true
-
-          echo "===== ÚLTIMAS 150 LÍNEAS ====="
-          tail -n 150 build.log
-
-          exit $BUILD_STATUS
-
-      - name: Install modules
-        if: success()
-        working-directory: kernel
-        run: |
-          mkdir -p ../modules
-
-          make -j2 \
-            ARCH=arm64 \
-            CC=clang \
-            HOSTCC=clang \
-            CROSS_COMPILE=aarch64-linux-gnu- \
-            modules_install \
-            INSTALL_MOD_PATH=../modules
-
-      - name: Verify build outputs
-        if: success()
-        working-directory: kernel
-        run: |
-          echo "===== KERNEL ====="
-          ls -lh arch/arm64/boot/Image.gz
-
-          echo "===== RT2X00 MODULES ====="
-          find drivers/net/wireless/ralink/rt2x00 \
-            -type f \
-            \( -name 'rt2800usb.ko' -o -name 'rt2800lib.ko' -o -name 'rt2x00*.ko' \) \
-            -print
-
-          echo "===== ALL MODULES ====="
-          find ../modules -name '*.ko' | head -50
-
-      - name: Package results
-        if: success()
-        run: |
-          mkdir -p artifact
-          cp kernel/arch/arm64/boot/Image.gz artifact/
-
-          if [ -d modules ]; then
-            tar -czf artifact/modules.tar.gz modules
-          fi
-
-          echo "===== ARTIFACTS ====="
-          ls -lh artifact
-
-      - name: Upload kernel
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: a03s-kernel-build
-          path: artifact/
+            exit $BUILD_STATUS
