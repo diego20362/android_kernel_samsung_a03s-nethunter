@@ -41,6 +41,53 @@ jobs:
           echo "===== RT5370 CONFIG ====="
           grep -E '^CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800_LIB|RT2800USB)' .config || true
 
+      - name: Diagnose MediaTek trace files
+        working-directory: kernel
+        run: |
+          echo "========================================"
+          echo "     DIAGNÓSTICO MTK FTRACE / TRACE"
+          echo "========================================"
+
+          echo
+          echo "===== mtk_ftrace.h ====="
+          find . -type f -name 'mtk_ftrace.h' -print || true
+
+          echo
+          echo "===== mtk_trace.c ====="
+          find . -type f -name 'mtk_trace.c' -print || true
+
+          echo
+          echo "===== TODOS LOS ARCHIVOS MTK TRACE ====="
+          find kernel/trace -maxdepth 2 -type f \
+            \( -iname '*mtk*trace*' -o -iname '*ftrace*' \) \
+            -print 2>/dev/null || true
+
+          echo
+          echo "===== CONTENIDO DE kernel/trace ====="
+          ls -lah kernel/trace | head -100
+
+          echo
+          echo "===== REFERENCIAS A TRACE_INCLUDE ====="
+          grep -R -n \
+            -E 'TRACE_INCLUDE_FILE|mtk_ftrace|mtk_trace' \
+            kernel/trace include/trace 2>/dev/null | head -100 || true
+
+          echo
+          echo "===== CABECERA mtk_trace.c ====="
+          if [ -f kernel/trace/mtk_trace.c ]; then
+            sed -n '1,80p' kernel/trace/mtk_trace.c
+          else
+            echo "NO SE ENCONTRÓ kernel/trace/mtk_trace.c"
+          fi
+
+          echo
+          echo "===== CABECERA mtk_ftrace.h ====="
+          if [ -f kernel/trace/mtk_ftrace.h ]; then
+            sed -n '1,120p' kernel/trace/mtk_ftrace.h
+          else
+            echo "NO SE ENCONTRÓ kernel/trace/mtk_ftrace.h"
+          fi
+
       - name: Build kernel
         working-directory: kernel
         run: |
@@ -59,7 +106,7 @@ jobs:
 
           echo
           echo "===== ERROR EN MTK_TRACE ====="
-          grep -n -B 15 -A 15 "mtk_trace.o" build.log || true
+          grep -n -B 20 -A 20 "mtk_trace.o" build.log || true
 
           echo
           echo "===== ERRORES DEL COMPILADOR ====="
