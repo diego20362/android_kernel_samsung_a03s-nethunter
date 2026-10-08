@@ -32,18 +32,34 @@ jobs:
           echo "===== RT5370 CONFIG ====="
           grep -E '^CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800_LIB|RT2800USB)' .config || true
 
-      - name: Fix MTK Ftrace include path
+      - name: Restore and fix MTK Ftrace
         working-directory: kernel
         run: |
-          echo "===== ANTES ====="
-          grep -n "TRACE_INCLUDE_PATH" kernel/trace/mtk_ftrace.h || true
-
-          sed -i 's/^#define TRACE_INCLUDE_PATH \.$/#define TRACE_INCLUDE_PATH kernel\/trace/' kernel/trace/mtk_ftrace.h
-
-          echo "===== DESPUÉS ====="
-          grep -n "TRACE_INCLUDE_PATH" kernel/trace/mtk_ftrace.h || true
+          echo "===== MTK FTRACE ====="
 
           test -f kernel/trace/mtk_ftrace.h
+          test -f kernel/trace/Makefile
+
+          echo "===== TRACE_INCLUDE_PATH ====="
+          grep -n "TRACE_INCLUDE_PATH" kernel/trace/mtk_ftrace.h || true
+
+          echo "===== MAKEFILE ANTES ====="
+          grep -n "mtk_trace" kernel/trace/Makefile || true
+
+          # Mantener el header con la configuración original.
+          sed -i 's/^#define TRACE_INCLUDE_PATH .*/#define TRACE_INCLUDE_PATH ./' kernel/trace/mtk_ftrace.h
+
+          # Evitar duplicar la línea si el workflow se ejecuta nuevamente.
+          sed -i '/^CFLAGS_mtk_trace\.o := -I$(src)$/d' kernel/trace/Makefile
+
+          # Hacer que mtk_trace.o pueda encontrar mtk_ftrace.h
+          printf '\nCFLAGS_mtk_trace.o := -I$(src)\n' >> kernel/trace/Makefile
+
+          echo "===== TRACE_INCLUDE_PATH DESPUÉS ====="
+          grep -n "TRACE_INCLUDE_PATH" kernel/trace/mtk_ftrace.h || true
+
+          echo "===== MAKEFILE DESPUÉS ====="
+          tail -n 10 kernel/trace/Makefile
 
       - name: Diagnose MediaTek trace files
         working-directory: kernel
@@ -54,8 +70,11 @@ jobs:
           echo "===== MTK TRACE ====="
           find . -type f -name 'mtk_trace.c' -print || true
 
-          echo "===== TRACE_INCLUDE_PATH ====="
+          echo "===== TRACE INCLUDE ====="
           grep -n -A2 -B2 "TRACE_INCLUDE_PATH" kernel/trace/mtk_ftrace.h || true
+
+          echo "===== MTK TRACE MAKEFILE ====="
+          grep -n "CFLAGS_mtk_trace" kernel/trace/Makefile || true
 
       - name: Build kernel
         working-directory: kernel
@@ -117,6 +136,7 @@ jobs:
         if: success()
         run: |
           mkdir -p artifact
+
           cp kernel/arch/arm64/boot/Image.gz artifact/
 
           if [ -d modules ]; then
