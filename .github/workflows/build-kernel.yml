@@ -58,12 +58,21 @@ jobs:
           BUILD_STATUS=${PIPESTATUS[0]}
 
           echo
-          echo "===== ÚLTIMAS 100 LÍNEAS DEL BUILD ====="
+          echo "===== ERROR EN MTK_TRACE ====="
+          grep -n -B 15 -A 15 "mtk_trace.o" build.log || true
+
+          echo
+          echo "===== ERRORES DEL COMPILADOR ====="
+          grep -n -E "error:|Error:|fatal error:" build.log | tail -30 || true
+
+          echo
+          echo "===== ÚLTIMAS 100 LÍNEAS ====="
           tail -n 100 build.log
 
           exit $BUILD_STATUS
 
       - name: Install modules
+        if: success()
         working-directory: kernel
         run: |
           mkdir -p ../modules
@@ -77,6 +86,7 @@ jobs:
             INSTALL_MOD_PATH=../modules
 
       - name: Verify build outputs
+        if: success()
         working-directory: kernel
         run: |
           echo "===== KERNEL ====="
@@ -94,6 +104,7 @@ jobs:
           find ../modules -name '*.ko' | head -50
 
       - name: Package results
+        if: success()
         run: |
           mkdir -p artifact
 
@@ -107,6 +118,7 @@ jobs:
           ls -lh artifact
 
       - name: Upload kernel
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: a03s-kernel-build
