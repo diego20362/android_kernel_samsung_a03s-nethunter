@@ -51,6 +51,7 @@ jobs:
             CC=clang \
             HOSTCC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
+            KCFLAGS=-gdwarf-4 \
             Image.gz \
             modules 2>&1 | tee build.log
 
@@ -66,6 +67,7 @@ jobs:
         working-directory: kernel
         run: |
           mkdir -p ../modules
+
           make -j2 \
             ARCH=arm64 \
             CC=clang \
