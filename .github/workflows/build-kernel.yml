@@ -41,6 +41,24 @@ jobs:
           echo "===== RT5370 CONFIG ====="
           grep -E '^CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800_LIB|RT2800USB)' .config || true
 
+      - name: Fix MTK Ftrace include path
+        working-directory: kernel
+        run: |
+          echo "===== ANTES ====="
+          grep -n "TRACE_INCLUDE_PATH" kernel/trace/mtk_ftrace.h || true
+
+          sed -i 's/^#define TRACE_INCLUDE_PATH \.$/#define TRACE_INCLUDE_PATH kernel\/trace/' \
+            kernel/trace/mtk_ftrace.h
+
+          echo
+          echo "===== DESPUÉS ====="
+          grep -n "TRACE_INCLUDE_PATH" kernel/trace/mtk_ftrace.h || true
+
+          echo
+          echo "===== COMPROBACIÓN DEL ARCHIVO ====="
+          test -f kernel/trace/mtk_ftrace.h
+          echo "mtk_ftrace.h encontrado correctamente."
+
       - name: Diagnose MediaTek trace files
         working-directory: kernel
         run: |
@@ -57,36 +75,15 @@ jobs:
           find . -type f -name 'mtk_trace.c' -print || true
 
           echo
-          echo "===== TODOS LOS ARCHIVOS MTK TRACE ====="
-          find kernel/trace -maxdepth 2 -type f \
-            \( -iname '*mtk*trace*' -o -iname '*ftrace*' \) \
-            -print 2>/dev/null || true
+          echo "===== TRACE_INCLUDE_PATH ACTUAL ====="
+          grep -n -A2 -B2 "TRACE_INCLUDE_PATH" \
+            kernel/trace/mtk_ftrace.h || true
 
           echo
-          echo "===== CONTENIDO DE kernel/trace ====="
-          ls -lah kernel/trace | head -100
-
-          echo
-          echo "===== REFERENCIAS A TRACE_INCLUDE ====="
+          echo "===== REFERENCIAS A MTK TRACE ====="
           grep -R -n \
             -E 'TRACE_INCLUDE_FILE|mtk_ftrace|mtk_trace' \
             kernel/trace include/trace 2>/dev/null | head -100 || true
-
-          echo
-          echo "===== CABECERA mtk_trace.c ====="
-          if [ -f kernel/trace/mtk_trace.c ]; then
-            sed -n '1,80p' kernel/trace/mtk_trace.c
-          else
-            echo "NO SE ENCONTRÓ kernel/trace/mtk_trace.c"
-          fi
-
-          echo
-          echo "===== CABECERA mtk_ftrace.h ====="
-          if [ -f kernel/trace/mtk_ftrace.h ]; then
-            sed -n '1,120p' kernel/trace/mtk_ftrace.h
-          else
-            echo "NO SE ENCONTRÓ kernel/trace/mtk_ftrace.h"
-          fi
 
       - name: Build kernel
         working-directory: kernel
