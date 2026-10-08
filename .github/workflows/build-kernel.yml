@@ -1,4 +1,85 @@
-- name: Build kernel
+name: Build A03s Kernel
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Clone kernel
+        run: |
+          git clone --depth=1 --branch android-4.19-stable https://github.com/diego20362/android_kernel_samsung_a03s-nethunter.git kernel
+
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang gcc-aarch64-linux-gnu make bc bison flex libssl-dev libelf-dev pahole
+
+      - name: Generate configuration
+        working-directory: kernel
+        run: |
+          make ARCH=arm64 \
+            CC=clang \
+            HOSTCC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            a03s_defconfig
+
+      - name: Verify RT5370 configuration
+        working-directory: kernel
+        run: |
+          echo "===== RT5370 CONFIG ====="
+          grep -E '^CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800_LIB|RT2800USB)' .config || true
+
+      - name: Fix MTK Ftrace
+        working-directory: kernel
+        run: |
+          echo "===== MTK FTRACE ====="
+
+          test -f kernel/trace/mtk_ftrace.h
+          test -f kernel/trace/Makefile
+
+          echo "===== TRACE_INCLUDE_PATH ANTES ====="
+          grep -n "TRACE_INCLUDE_PATH" kernel/trace/mtk_ftrace.h || true
+
+          echo "===== MAKEFILE ANTES ====="
+          grep -n "CFLAGS_mtk_trace" kernel/trace/Makefile || true
+
+          # Restaurar la ruta original del header.
+          sed -i 's/^#define TRACE_INCLUDE_PATH .*/#define TRACE_INCLUDE_PATH ./' kernel/trace/mtk_ftrace.h
+
+          # Evitar duplicados si se vuelve a ejecutar.
+          sed -i '/^CFLAGS_mtk_trace\.o := -I$(src)$/d' kernel/trace/Makefile
+
+          # Permitir que mtk_trace.o encuentre mtk_ftrace.h.
+          printf '\nCFLAGS_mtk_trace.o := -I$(src)\n' >> kernel/trace/Makefile
+
+          echo "===== TRACE_INCLUDE_PATH DESPUÉS ====="
+          grep -n "TRACE_INCLUDE_PATH" kernel/trace/mtk_ftrace.h || true
+
+          echo "===== MAKEFILE DESPUÉS ====="
+          tail -n 10 kernel/trace/Makefile
+
+      - name: Diagnose trace headers
+        working-directory: kernel
+        run: |
+          echo "===== MTK FTRACE ====="
+          find . -type f -name 'mtk_ftrace.h' -print || true
+
+          echo "===== MTK TRACE ====="
+          find . -type f -name 'mtk_trace.c' -print || true
+
+          echo "===== TRACE MMSTAT ====="
+          find . -type f -name 'trace_mmstat.h' -print || true
+
+          echo "===== TRACE INCLUDE PATH ====="
+          grep -n -A2 -B2 "TRACE_INCLUDE_PATH" kernel/trace/mtk_ftrace.h || true
+
+          echo "===== MTK TRACE MAKEFILE ====="
+          grep -n "CFLAGS_mtk_trace" kernel/trace/Makefile || true
+
+      - name: Build kernel
         working-directory: kernel
         run: |
           set +e
@@ -23,3 +104,54 @@
           tail -n 150 build.log
 
           exit $BUILD_STATUS
+
+      - name: Install modules
+        if: success()
+        working-directory: kernel
+        run: |
+          mkdir -p ../modules
+
+          make -j2 \
+            ARCH=arm64 \
+            CC=clang \
+            HOSTCC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            modules_install \
+            INSTALL_MOD_PATH=../modules
+
+      - name: Verify build outputs
+        if: success()
+        working-directory: kernel
+        run: |
+          echo "===== KERNEL ====="
+          ls -lh arch/arm64/boot/Image.gz
+
+          echo "===== RT2X00 MODULES ====="
+          find drivers/net/wireless/ralink/rt2x00 \
+            -type f \
+            \( -name 'rt2800usb.ko' -o -name 'rt2800lib.ko' -o -name 'rt2x00*.ko' \) \
+            -print
+
+          echo "===== ALL MODULES ====="
+          find ../modules -name '*.ko' | head -50
+
+      - name: Package results
+        if: success()
+        run: |
+          mkdir -p artifact
+
+          cp kernel/arch/arm64/boot/Image.gz artifact/
+
+          if [ -d modules ]; then
+            tar -czf artifact/modules.tar.gz modules
+          fi
+
+          echo "===== ARTIFACTS ====="
+          ls -lh artifact
+
+      - name: Upload kernel
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a03s-kernel-build
+          path: artifact/
