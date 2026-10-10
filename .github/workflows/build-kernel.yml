@@ -8,7 +8,6 @@ jobs:
     runs-on: ubuntu-22.04
 
     steps:
-
       - name: Clone kernel
         run: |
           git clone --depth=1 \
@@ -19,7 +18,6 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-
           sudo apt-get install -y \
             clang \
             gcc-aarch64-linux-gnu \
@@ -34,11 +32,10 @@ jobs:
             cpio
 
           echo "===== TOOLS ====="
-          clang --version | head -n 1
-          aarch64-linux-gnu-gcc --version | head -n 1
-          make --version | head -n 1
-          cpio --version | head -n 1
-          xz --version | head -n 1
+          command -v clang
+          command -v cpio
+          command -v xz
+          command -v aarch64-linux-gnu-gcc
 
       - name: Generate configuration
         working-directory: kernel
@@ -52,7 +49,7 @@ jobs:
       - name: Verify RT5370 configuration
         working-directory: kernel
         run: |
-          echo "===== RT5370 CONFIG ====="
+          echo "===== RALINK CONFIG ====="
 
           grep -E \
             '^CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800_LIB|RT2800USB)' \
@@ -61,24 +58,20 @@ jobs:
           echo "===== RT5370 SUPPORT ====="
 
           grep -E \
-            'CONFIG_RT2800USB_RT53XX|CONFIG_RT2800USB=' \
+            '^CONFIG_RT2800USB_RT53XX=' \
             .config || true
+
+          grep -q '^CONFIG_WLAN_VENDOR_RALINK=y$' .config
+          grep -q '^CONFIG_RT2800USB=m$' .config
+          grep -q '^CONFIG_RT2800USB_RT53XX=y$' .config
 
       - name: Fix MTK Ftrace
         working-directory: kernel
         run: |
-          echo "===== MTK FTRACE ====="
+          set -e
 
           test -f kernel/trace/mtk_ftrace.h
           test -f kernel/trace/Makefile
-
-          echo "===== TRACE_INCLUDE_PATH ANTES ====="
-          grep -n "TRACE_INCLUDE_PATH" \
-            kernel/trace/mtk_ftrace.h || true
-
-          echo "===== MAKEFILE ANTES ====="
-          grep -n "CFLAGS_mtk_trace" \
-            kernel/trace/Makefile || true
 
           sed -i \
             's/^#define TRACE_INCLUDE_PATH .*/#define TRACE_INCLUDE_PATH ./' \
@@ -91,112 +84,128 @@ jobs:
           printf '\nCFLAGS_mtk_trace.o := -I$(src)\n' \
             >> kernel/trace/Makefile
 
-          echo "===== TRACE_INCLUDE_PATH DESPUÉS ====="
-          grep -n "TRACE_INCLUDE_PATH" \
-            kernel/trace/mtk_ftrace.h || true
+          echo "===== FTRACE CONFIGURATION ====="
+          grep -n 'TRACE_INCLUDE_PATH' \
+            kernel/trace/mtk_ftrace.h
 
-          echo "===== MAKEFILE DESPUÉS ====="
-          tail -n 10 kernel/trace/Makefile
+          grep -n 'CFLAGS_mtk_trace' \
+            kernel/trace/Makefile
 
       - name: Fix kheaders cpio path
         working-directory: kernel
         run: |
-          echo "===== CPIO ====="
+          set -e
 
           CPIO_PATH="$(command -v cpio)"
 
-          echo "CPIO PATH: $CPIO_PATH"
-
           test -x "$CPIO_PATH"
 
-          echo "===== GEN_KHEADERS ANTES ====="
+          echo "===== CPIO PATH ====="
+          echo "$CPIO_PATH"
 
-          nl -ba kernel/gen_kheaders.sh | \
-            sed -n '55,68p'
-
-          echo "===== REEMPLAZANDO RUTA ====="
+          echo "===== ORIGINAL SCRIPT ====="
+          nl -ba kernel/gen_kheaders.sh | sed -n '55,68p'
 
           sed -i \
             "s#/tools/build/cpio#$CPIO_PATH#g" \
             kernel/gen_kheaders.sh
 
-          echo "===== GEN_KHEADERS DESPUÉS ====="
+          echo "===== UPDATED SCRIPT ====="
+          nl -ba kernel/gen_kheaders.sh | sed -n '55,68p'
 
-          nl -ba kernel/gen_kheaders.sh | \
-            sed -n '55,68p'
-
-          echo "===== VERIFICACIÓN ====="
-
-          if grep -q "/tools/build/cpio" kernel/gen_kheaders.sh; then
-            echo "ERROR: todavía existe /tools/build/cpio"
+          if grep -q '/tools/build/cpio' kernel/gen_kheaders.sh; then
+            echo "ERROR: ruta antigua de cpio todavía presente"
             exit 1
           fi
 
-          echo "OK: gen_kheaders.sh utilizará $CPIO_PATH"
-
-      - name: Diagnose trace headers
+      - name: Locate CTS configuration header
         working-directory: kernel
         run: |
-          echo "===== MTK FTRACE ====="
+          set -e
 
-          find . \
+          echo "===== BUSCANDO cts_config.h ====="
+
+          find drivers/input/touchscreen/mediatek \
             -type f \
-            -name 'mtk_ftrace.h' \
-            -print || true
+            -name 'cts_config.h' \
+            -print
 
-          echo "===== MTK TRACE ====="
-
-          find . \
+          CTS_HEADER="$(find drivers/input/touchscreen/mediatek \
             -type f \
-            -name 'mtk_trace.c' \
-            -print || true
+            -name 'cts_config.h' \
+            -print -quit)"
 
+          if [ -z "$CTS_HEADER" ]; then
+            echo "ERROR: cts_config.h no existe en el árbol del kernel."
+            echo "No se creará un archivo ficticio."
+            echo "Hay que recuperar el archivo correcto del código fuente."
+            exit 1
+          fi
+
+          CTS_DIR="$(dirname "$CTS_HEADER")"
+
+          echo "Header encontrado: $CTS_HEADER"
+          echo "Directorio de inclusión: $CTS_DIR"
+
+          echo "CTS_CONFIG_INCLUDE=-I$CTS_DIR" >> "$GITHUB_ENV"
+
+      - name: Diagnose trace and touchscreen headers
+        working-directory: kernel
+        run: |
           echo "===== TRACE MMSTAT ====="
 
-          find . \
+          find . -type f \
+            -name 'trace_mmstat.h' -print || true
+
+          echo "===== MTK FTRACE ====="
+
+          find . -type f \
+            -name 'mtk_ftrace.h' -print || true
+
+          echo "===== CTS HEADER ====="
+
+          find drivers/input/touchscreen/mediatek \
             -type f \
-            -name 'trace_mmstat.h' \
+            -name 'cts_config.h' \
             -print || true
 
-          echo "===== TRACE INCLUDE PATH ====="
+          echo "===== CTS INCLUDE ====="
 
-          grep -n -A2 -B2 \
-            "TRACE_INCLUDE_PATH" \
-            kernel/trace/mtk_ftrace.h || true
-
-          echo "===== MTK TRACE MAKEFILE ====="
-
-          grep -n \
-            "CFLAGS_mtk_trace" \
-            kernel/trace/Makefile || true
+          grep -R -n '"cts_config.h"' \
+            drivers/input/touchscreen/mediatek || true
 
       - name: Build kernel
         working-directory: kernel
+        shell: bash
         run: |
-          set +e
+          set -o pipefail
+
+          echo "===== BUILD KERNEL ====="
+          echo "CTS_CONFIG_INCLUDE=$CTS_CONFIG_INCLUDE"
 
           make -j1 \
             ARCH=arm64 \
             CC=clang \
             HOSTCC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            KCFLAGS="-gdwarf-4 -Ikernel/trace" \
+            KCFLAGS="-gdwarf-4 -Ikernel/trace $CTS_CONFIG_INCLUDE" \
             Image.gz \
             modules 2>&1 | tee build.log
 
-          BUILD_STATUS=${PIPESTATUS[0]}
+      - name: Show build diagnostics
+        if: always()
+        working-directory: kernel
+        run: |
+          if [ -f build.log ]; then
+            echo "===== ERRORES ====="
 
-          echo "===== ERRORES REALES ====="
+            grep -n -E \
+              "error:|fatal error|undefined reference|Error 1|Error 2|Error 127" \
+              build.log | tail -50 || true
 
-          grep -n -E \
-            "error:|fatal error|undefined reference|Error 1|Error 2|Error 127" \
-            build.log | tail -50 || true
-
-          echo "===== ÚLTIMAS 150 LÍNEAS ====="
-
-          tail -n 150 build.log
-
-          exit $BUILD_STATUS
+            echo "===== FINAL DEL REGISTRO ====="
+            tail -n 100 build.log
+          fi
 
       - name: Install modules
         if: success()
@@ -216,17 +225,14 @@ jobs:
         if: success()
         working-directory: kernel
         run: |
+          set -e
+
           echo "===== KERNEL ====="
+          test -s arch/arm64/boot/Image.gz
+          ls -lh arch/arm64/boot/Image.gz
+          sha256sum arch/arm64/boot/Image.gz
 
-          ls -lh \
-            arch/arm64/boot/Image.gz
-
-          echo "===== KERNEL SHA256 ====="
-
-          sha256sum \
-            arch/arm64/boot/Image.gz
-
-          echo "===== RT2X00 MODULES ====="
+          echo "===== RT2X00 DRIVER FILES ====="
 
           find drivers/net/wireless/ralink/rt2x00 \
             -type f \
@@ -237,39 +243,28 @@ jobs:
             \) \
             -print
 
-          echo "===== ALL MODULES ====="
+          echo "===== INSTALLED RT2X00 MODULES ====="
 
           find ../modules \
+            -type f \
             -name '*.ko' \
-            -print | head -100
-
-          echo "===== RT2800USB MODULE CHECK ====="
-
-          find . \
-            -name 'rt2800usb.ko' \
-            -print || true
+            | grep -E 'rt2800usb|rt2800lib|rt2x00' || true
 
       - name: Package results
         if: success()
         run: |
+          set -e
+
           mkdir -p artifact
 
-          cp \
-            kernel/arch/arm64/boot/Image.gz \
-            artifact/
+          cp kernel/arch/arm64/boot/Image.gz artifact/
 
           if [ -d modules ]; then
-            tar -czf \
-              artifact/modules.tar.gz \
-              modules
+            tar -czf artifact/modules.tar.gz modules
           fi
 
           echo "===== ARTIFACTS ====="
-
           ls -lh artifact
-
-          echo "===== SHA256 ====="
-
           sha256sum artifact/*
 
       - name: Upload kernel
