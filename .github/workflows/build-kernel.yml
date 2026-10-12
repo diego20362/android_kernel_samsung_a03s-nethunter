@@ -50,13 +50,11 @@ jobs:
         working-directory: kernel
         run: |
           echo "===== RALINK CONFIG ====="
-
           grep -E \
             '^CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800_LIB|RT2800USB)' \
             .config || true
 
           echo "===== RT5370 SUPPORT ====="
-
           grep -E \
             '^CONFIG_RT2800USB_RT53XX=' \
             .config || true
@@ -84,10 +82,9 @@ jobs:
           printf '\nCFLAGS_mtk_trace.o := -I$(src)\n' \
             >> kernel/trace/Makefile
 
-          echo "===== FTRACE CONFIGURATION ====="
+          echo "===== FTRACE ====="
           grep -n 'TRACE_INCLUDE_PATH' \
             kernel/trace/mtk_ftrace.h
-
           grep -n 'CFLAGS_mtk_trace' \
             kernel/trace/Makefile
 
@@ -97,82 +94,92 @@ jobs:
           set -e
 
           CPIO_PATH="$(command -v cpio)"
-
           test -x "$CPIO_PATH"
 
-          echo "===== CPIO PATH ====="
+          echo "===== CPIO ====="
           echo "$CPIO_PATH"
 
-          echo "===== ORIGINAL SCRIPT ====="
+          echo "===== SCRIPT BEFORE ====="
           nl -ba kernel/gen_kheaders.sh | sed -n '55,68p'
 
           sed -i \
             "s#/tools/build/cpio#$CPIO_PATH#g" \
             kernel/gen_kheaders.sh
 
-          echo "===== UPDATED SCRIPT ====="
+          echo "===== SCRIPT AFTER ====="
           nl -ba kernel/gen_kheaders.sh | sed -n '55,68p'
 
           if grep -q '/tools/build/cpio' kernel/gen_kheaders.sh; then
-            echo "ERROR: ruta antigua de cpio todavía presente"
+            echo "ERROR: ruta de cpio sin corregir"
             exit 1
           fi
 
-      - name: Locate CTS configuration header
+      - name: Locate missing headers
         working-directory: kernel
+        shell: bash
         run: |
           set -e
 
-          echo "===== BUSCANDO cts_config.h ====="
-
+          echo "===== BUSCAR CTS CONFIG ====="
           find drivers/input/touchscreen/mediatek \
-            -type f \
-            -name 'cts_config.h' \
-            -print
+            -type f -name 'cts_config.h' -print
 
-          CTS_HEADER="$(find drivers/input/touchscreen/mediatek \
-            -type f \
-            -name 'cts_config.h' \
-            -print -quit)"
+          echo "===== BUSCAR HAL KPD ====="
+          find . -type f -name 'hal_kpd.h' -print
 
-          if [ -z "$CTS_HEADER" ]; then
-            echo "ERROR: cts_config.h no existe en el árbol del kernel."
-            echo "No se creará un archivo ficticio."
-            echo "Hay que recuperar el archivo correcto del código fuente."
-            exit 1
-          fi
-
-          CTS_DIR="$(dirname "$CTS_HEADER")"
-
-          echo "Header encontrado: $CTS_HEADER"
-          echo "Directorio de inclusión: $CTS_DIR"
-
-          echo "CTS_CONFIG_INCLUDE=-I$CTS_DIR" >> "$GITHUB_ENV"
-
-      - name: Diagnose trace and touchscreen headers
-        working-directory: kernel
-        run: |
-          echo "===== TRACE MMSTAT ====="
-
-          find . -type f \
-            -name 'trace_mmstat.h' -print || true
-
-          echo "===== MTK FTRACE ====="
-
-          find . -type f \
-            -name 'mtk_ftrace.h' -print || true
-
-          echo "===== CTS HEADER ====="
-
-          find drivers/input/touchscreen/mediatek \
-            -type f \
-            -name 'cts_config.h' \
-            -print || true
-
-          echo "===== CTS INCLUDE ====="
-
+          echo "===== REFERENCIAS CTS CONFIG ====="
           grep -R -n '"cts_config.h"' \
             drivers/input/touchscreen/mediatek || true
+
+          echo "===== REFERENCIAS HAL KPD ====="
+          grep -R -n '"hal_kpd.h"' \
+            drivers/input/touchscreen/mediatek || true
+
+          echo "===== CTS CORE ====="
+          find drivers/input/touchscreen/mediatek \
+            -type f -name 'cts_core.h' -print
+
+          echo "===== PREPARAR RUTAS DE INCLUSION ====="
+
+          INCLUDE_FLAGS=""
+
+          for HEADER in cts_config.h hal_kpd.h; do
+            HEADER_PATH="$(find . -type f -name "$HEADER" -print -quit)"
+
+            if [ -z "$HEADER_PATH" ]; then
+              echo "AVISO: no se encontró $HEADER"
+              continue
+            fi
+
+            HEADER_DIR="$(dirname "$HEADER_PATH")"
+            INCLUDE_FLAGS="$INCLUDE_FLAGS -I$HEADER_DIR"
+
+            echo "$HEADER encontrado en: $HEADER_DIR"
+          done
+
+          echo "HEADER_INCLUDE_FLAGS=$INCLUDE_FLAGS" >> "$GITHUB_ENV"
+
+          echo "===== RUTAS PREPARADAS ====="
+          echo "$INCLUDE_FLAGS"
+
+      - name: Diagnose touchscreen headers
+        if: always()
+        working-directory: kernel
+        run: |
+          echo "===== CTS CONFIG ====="
+          find drivers/input/touchscreen/mediatek \
+            -type f -name 'cts_config.h' -print || true
+
+          echo "===== HAL KPD ====="
+          find . -type f -name 'hal_kpd.h' -print || true
+
+          echo "===== CTS CORE HEADER ====="
+          find drivers/input/touchscreen/mediatek \
+            -type f -name 'cts_core.h' -print || true
+
+          echo "===== TOUCHSCREEN OEM SOURCE ====="
+          find drivers/input/touchscreen/mediatek \
+            -type f -name 'cts_oem_huaqin.c' -print || true
 
       - name: Build kernel
         working-directory: kernel
@@ -180,15 +187,15 @@ jobs:
         run: |
           set -o pipefail
 
-          echo "===== BUILD KERNEL ====="
-          echo "CTS_CONFIG_INCLUDE=$CTS_CONFIG_INCLUDE"
+          echo "===== INCLUDE FLAGS ====="
+          echo "$HEADER_INCLUDE_FLAGS"
 
           make -j1 \
             ARCH=arm64 \
             CC=clang \
             HOSTCC=clang \
             CROSS_COMPILE=aarch64-linux-gnu- \
-            KCFLAGS="-gdwarf-4 -Ikernel/trace $CTS_CONFIG_INCLUDE" \
+            KCFLAGS="-gdwarf-4 -Ikernel/trace $HEADER_INCLUDE_FLAGS" \
             Image.gz \
             modules 2>&1 | tee build.log
 
@@ -201,7 +208,7 @@ jobs:
 
             grep -n -E \
               "error:|fatal error|undefined reference|Error 1|Error 2|Error 127" \
-              build.log | tail -50 || true
+              build.log | tail -60 || true
 
             echo "===== FINAL DEL REGISTRO ====="
             tail -n 100 build.log
@@ -233,28 +240,22 @@ jobs:
           sha256sum arch/arm64/boot/Image.gz
 
           echo "===== RT2X00 DRIVER FILES ====="
-
           find drivers/net/wireless/ralink/rt2x00 \
             -type f \
             \( \
               -name 'rt2800usb.ko' \
               -o -name 'rt2800lib.ko' \
               -o -name 'rt2x00*.ko' \
-            \) \
-            -print
+            \) -print
 
           echo "===== INSTALLED RT2X00 MODULES ====="
-
-          find ../modules \
-            -type f \
-            -name '*.ko' \
+          find ../modules -type f -name '*.ko' \
             | grep -E 'rt2800usb|rt2800lib|rt2x00' || true
 
       - name: Package results
         if: success()
         run: |
           set -e
-
           mkdir -p artifact
 
           cp kernel/arch/arm64/boot/Image.gz artifact/
