@@ -50,11 +50,13 @@ jobs:
         working-directory: kernel
         run: |
           echo "===== RALINK CONFIG ====="
+
           grep -E \
             '^CONFIG_(WLAN_VENDOR_RALINK|RT2X00|RT2800_LIB|RT2800USB)' \
             .config || true
 
           echo "===== RT5370 SUPPORT ====="
+
           grep -E \
             '^CONFIG_RT2800USB_RT53XX=' \
             .config || true
@@ -99,67 +101,56 @@ jobs:
           echo "===== CPIO ====="
           echo "$CPIO_PATH"
 
-          echo "===== SCRIPT BEFORE ====="
-          nl -ba kernel/gen_kheaders.sh | sed -n '55,68p'
-
           sed -i \
             "s#/tools/build/cpio#$CPIO_PATH#g" \
             kernel/gen_kheaders.sh
 
-          echo "===== SCRIPT AFTER ====="
-          nl -ba kernel/gen_kheaders.sh | sed -n '55,68p'
-
           if grep -q '/tools/build/cpio' kernel/gen_kheaders.sh; then
-            echo "ERROR: ruta de cpio sin corregir"
+            echo "ERROR: ruta antigua de cpio"
             exit 1
           fi
 
-      - name: Locate missing headers
+          echo "===== CPIO CORREGIDO ====="
+          grep -n 'cpio' kernel/gen_kheaders.sh || true
+
+      - name: Locate touchscreen headers
         working-directory: kernel
         shell: bash
         run: |
           set -e
 
-          echo "===== BUSCAR CTS CONFIG ====="
-          find drivers/input/touchscreen/mediatek \
-            -type f -name 'cts_config.h' -print
+          echo "===== BUSCAR ENCABEZADOS ====="
 
-          echo "===== BUSCAR HAL KPD ====="
-          find . -type f -name 'hal_kpd.h' -print
+          for HEADER in cts_config.h hal_kpd.h mtkfb_info.h; do
+            echo "----- $HEADER -----"
+            find . -type f -name "$HEADER" -print
+          done
 
-          echo "===== REFERENCIAS CTS CONFIG ====="
-          grep -R -n '"cts_config.h"' \
+          echo "===== REFERENCIAS EN TOUCHSCREEN ====="
+
+          grep -R -n -E \
+            '"(cts_config|hal_kpd|mtkfb_info)\.h"' \
             drivers/input/touchscreen/mediatek || true
-
-          echo "===== REFERENCIAS HAL KPD ====="
-          grep -R -n '"hal_kpd.h"' \
-            drivers/input/touchscreen/mediatek || true
-
-          echo "===== CTS CORE ====="
-          find drivers/input/touchscreen/mediatek \
-            -type f -name 'cts_core.h' -print
 
           echo "===== PREPARAR RUTAS DE INCLUSION ====="
 
           INCLUDE_FLAGS=""
 
-          for HEADER in cts_config.h hal_kpd.h; do
+          for HEADER in cts_config.h hal_kpd.h mtkfb_info.h; do
             HEADER_PATH="$(find . -type f -name "$HEADER" -print -quit)"
 
-            if [ -z "$HEADER_PATH" ]; then
-              echo "AVISO: no se encontró $HEADER"
-              continue
+            if [ -n "$HEADER_PATH" ]; then
+              HEADER_DIR="$(dirname "$HEADER_PATH")"
+              INCLUDE_FLAGS="$INCLUDE_FLAGS -I$HEADER_DIR"
+              echo "Encontrado: $HEADER_PATH"
+            else
+              echo "AVISO: falta $HEADER en el árbol del kernel"
             fi
-
-            HEADER_DIR="$(dirname "$HEADER_PATH")"
-            INCLUDE_FLAGS="$INCLUDE_FLAGS -I$HEADER_DIR"
-
-            echo "$HEADER encontrado en: $HEADER_DIR"
           done
 
           echo "HEADER_INCLUDE_FLAGS=$INCLUDE_FLAGS" >> "$GITHUB_ENV"
 
-          echo "===== RUTAS PREPARADAS ====="
+          echo "===== RUTAS ====="
           echo "$INCLUDE_FLAGS"
 
       - name: Diagnose touchscreen headers
@@ -167,19 +158,23 @@ jobs:
         working-directory: kernel
         run: |
           echo "===== CTS CONFIG ====="
-          find drivers/input/touchscreen/mediatek \
-            -type f -name 'cts_config.h' -print || true
+          find . -type f -name 'cts_config.h' -print || true
 
           echo "===== HAL KPD ====="
           find . -type f -name 'hal_kpd.h' -print || true
 
-          echo "===== CTS CORE HEADER ====="
-          find drivers/input/touchscreen/mediatek \
-            -type f -name 'cts_core.h' -print || true
+          echo "===== MTKFB INFO ====="
+          find . -type f -name 'mtkfb_info.h' -print || true
 
-          echo "===== TOUCHSCREEN OEM SOURCE ====="
-          find drivers/input/touchscreen/mediatek \
-            -type f -name 'cts_oem_huaqin.c' -print || true
+          echo "===== CTS PLATFORM ====="
+          sed -n '1,90p' \
+            drivers/input/touchscreen/mediatek/022/chipone-tddi/cts_platform.h \
+            2>/dev/null || true
+
+          echo "===== CTS CORE ====="
+          sed -n '1,35p' \
+            drivers/input/touchscreen/mediatek/022/chipone-tddi/cts_core.h \
+            2>/dev/null || true
 
       - name: Build kernel
         working-directory: kernel
@@ -239,16 +234,18 @@ jobs:
           ls -lh arch/arm64/boot/Image.gz
           sha256sum arch/arm64/boot/Image.gz
 
-          echo "===== RT2X00 DRIVER FILES ====="
+          echo "===== RT2X00 DRIVER SOURCE ====="
+
           find drivers/net/wireless/ralink/rt2x00 \
             -type f \
             \( \
-              -name 'rt2800usb.ko' \
-              -o -name 'rt2800lib.ko' \
-              -o -name 'rt2x00*.ko' \
+              -name 'rt2800usb.c' \
+              -o -name 'rt2800lib.c' \
+              -o -name 'rt2x00usb.c' \
             \) -print
 
           echo "===== INSTALLED RT2X00 MODULES ====="
+
           find ../modules -type f -name '*.ko' \
             | grep -E 'rt2800usb|rt2800lib|rt2x00' || true
 
@@ -256,6 +253,7 @@ jobs:
         if: success()
         run: |
           set -e
+
           mkdir -p artifact
 
           cp kernel/arch/arm64/boot/Image.gz artifact/
